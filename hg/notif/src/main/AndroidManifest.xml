@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: the notification icon fix's own APK (com.hypergestures.notif), the LSPosed
+     module (META-INF/xposed/ in hg/notif/src/main/resources). No components and no permissions:
+     it never runs a process of its own. LSPosed copies its dex into SystemUI and the AOD, and
+     that dex holds only the hooks (modules/notif/build.gradle.kts says why). The label and
+     description are what LSPosed's module list shows. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="@string/hg_notif_label"
+        android:description="@string/hg_notif_description"
+        android:allowBackup="false" />
+</manifest>

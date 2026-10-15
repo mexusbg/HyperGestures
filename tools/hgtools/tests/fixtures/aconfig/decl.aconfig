@@ -1,0 +1,22 @@
+package: "com.example.flags"
+container: "system"
+
+flag {
+    name: "enable_foo_bar"
+    namespace: "systemui"
+    description: "A \"quoted\" description "
+        "continued on a second line"
+    bug: "123"
+}
+
+# comment line
+flag {
+    name: "exported_thing"
+    namespace: "launcher"
+    description: "x"
+    bug: "1"
+    is_exported: true
+    is_fixed_read_only: true
+    metadata { purpose: PURPOSE_BUGFIX }
+}
+flag { name: "never_set" namespace: "n" description: "d" bug: "2" }

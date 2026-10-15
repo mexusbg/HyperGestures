@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: the settings page (HgSettingsActivity, HgSettingsFragment) and Save logs
+     (HgLogCollector). -->
+<resources>
+    <!-- Settings page title -->
+    <string name="hg_settings_title">HyperGestures</string>
+
+    <!-- Section headers -->
+    <string name="hg_settings_recents">Recents</string>
+    <string name="hg_settings_gestures">Gestures</string>
+    <!-- Settings that work whatever the home app is (also with HyperOS's own gestures) -->
+    <string name="hg_settings_system">System</string>
+    <string name="hg_settings_logs">Logs</string>
+    <string name="hg_settings_about">About</string>
+
+    <!-- Note at the top of the page while the system launcher (MiuiHome) is the home app; the
+         Recents and Gestures sections are hidden then -->
+    <string name="hg_settings_system_home_note">HyperOS\'s own gestures and recents are in use
+        while the system launcher is the home app. Choose another home app and reboot to use
+        HyperGestures\' recents and gestures.</string>
+
+    <!-- Recents layout: list title, and its three choices -->
+    <string name="hg_settings_layout">Layout</string>
+    <!-- HyperOS's vertical layout: two columns of cards, scrolling up and down -->
+    <string name="hg_settings_layout_vertical">Vertical</string>
+    <string name="hg_settings_layout_horizontal">Horizontal</string>
+    <string name="hg_settings_layout_stack">Stack</string>
+
+    <string name="hg_settings_blur">Blur background</string>
+    <!-- Read each time recents opens: a change shows the next time it opens -->
+    <string name="hg_settings_blur_summary">Blurred wallpaper behind the cards. Off: the
+        wallpaper is dimmed instead</string>
+    <string name="hg_settings_lock_swipe">Swipe down to lock</string>
+    <!-- Read at each touch: the next swipe follows a change -->
+    <string name="hg_settings_lock_swipe_summary">Pull a card down to lock or unlock its app. Off:
+        pulling a card down opens it</string>
+    <string name="hg_settings_corner_drag">Corner targets while swiping up</string>
+    <string name="hg_settings_corner_drag_summary">Drag an app to a top corner for split screen or
+        a floating window</string>
+    <string name="hg_settings_show_mem">Show memory</string>
+    <string name="hg_settings_show_mem_summary">Free memory under the cards (shared with
+        HyperOS)</string>
+    <string name="hg_settings_clear_kills">Clear all closes apps</string>
+    <string name="hg_settings_clear_kills_summary">Locked apps and the app you came from stay
+        open</string>
+    <string name="hg_settings_dismiss_kills">Swiping a card away closes the app</string>
+    <string name="hg_settings_dismiss_kills_summary">Off: only its card is removed</string>
+
+    <!-- A swipe up over a home app other than the system launcher sends Back (HgHomeBack) -->
+    <string name="hg_settings_home_back">Back from home</string>
+    <string name="hg_settings_home_back_summary">Swipe up on the home screen goes back (closes
+        folders and the app drawer)</string>
+    <string name="hg_settings_back_style">MIUI back arrow</string>
+    <string name="hg_settings_back_style_summary">HyperOS\'s back arrow. Back works once the
+        arrow appears, or with a quick swipe. Off: Android\'s arrow</string>
+    <string name="hg_settings_back_left">Back sensitivity, left edge</string>
+    <string name="hg_settings_back_right">Back sensitivity, right edge</string>
+    <!-- Summary of a back sensitivity slider: the edge width scale, e.g. "1.33x" -->
+    <string name="hg_settings_back_scale">%1$sx. Higher: back starts further from the
+        edge</string>
+    <!-- Summary of a back sensitivity slider at its default -->
+    <string name="hg_settings_back_scale_default">%1$sx (default). Higher: back starts further
+        from the edge</string>
+    <string name="hg_settings_hide_line">Hide gesture line</string>
+    <!-- SystemUI reads the handle's colours when it builds the navigation bar, so the change
+         shows after a reboot (HgHideGestureLine) -->
+    <string name="hg_settings_hide_line_summary">Makes the navigation handle invisible. Swipes
+        and Circle to Search keep working. Takes effect after a reboot.</string>
+    <!-- Toast when the system refused to hide or show the gesture line -->
+    <string name="hg_settings_hide_line_failed">Could not change the gesture line</string>
+    <!-- Under "Hide gesture line": the overlay's state (HgHideGestureLine.status) -->
+    <string name="hg_settings_hide_line_hidden">Hidden now</string>
+    <string name="hg_settings_hide_line_hidden_after_reboot">Hidden after the next reboot</string>
+    <string name="hg_settings_hide_line_shown_after_reboot">Shown again after the next
+        reboot</string>
+    <string name="hg_settings_hide_line_not_applied">Not applied: the system did not take the
+        change</string>
+    <!-- The notification icon fix: LSPosed hooks in SystemUI and the AOD, applied to the next
+         notification icon once on. The hooks are their own APK and LSPosed module,
+         com.hypergestures.notif, labelled "HyperGestures notification icons" -->
+    <string name="hg_settings_notif_icons">Fix notification icons</string>
+    <string name="hg_settings_notif_icons_summary">Real app icons in notifications instead of white
+        squares. Needs LSPosed with the module HyperGestures notification icons enabled for
+        System UI and AOD. Turn off HyperNotificationFix if you also use it.</string>
+    <!-- Under the notification icon fix while it is on: System UI loaded our hooks this boot -->
+    <string name="hg_settings_notif_active">Active in System UI</string>
+    <!-- Under the notification icon fix while it is on: System UI did not load our hooks -->
+    <string name="hg_settings_notif_not_loaded">Not loaded (enable HyperGestures notification
+        icons in LSPosed for System UI and AOD, then reboot)</string>
+    <!-- HgAppInfoTrampoline: other apps' App info requests open Security's App info the
+         MiuiHome way -->
+    <string name="hg_settings_app_info_fix">Fix App info back</string>
+    <string name="hg_settings_app_info_fix_summary">App info opened from any app keeps its place
+        when you open App permissions, as on stock MIUI.</string>
+
+    <string name="hg_settings_logs_privacy">Saved logs name the apps you opened, and can contain
+        other apps\' messages. Review them before posting publicly.</string>
+    <string name="hg_settings_logs_filter">Recents and gestures only</string>
+    <string name="hg_settings_logs_filter_summary">Keeps this app\'s lines and the system\'s
+        recents, split screen, floating window and transition lines; off adds everything, with
+        the system\'s list of open apps and activities</string>
+    <string name="hg_settings_logs_save">Save logs</string>
+    <string name="hg_settings_logs_save_summary">A zip in Downloads</string>
+    <string name="hg_settings_logs_saving">Collecting logs…</string>
+    <!-- Toast after the logs were saved, e.g. "Saved to Downloads: HyperGestures-logs-….zip" -->
+    <string name="hg_settings_logs_saved">Saved to Downloads: %1$s</string>
+    <!-- Toast when saving the logs failed, with the reason -->
+    <string name="hg_settings_logs_failed">Could not save logs: %1$s</string>
+
+    <string name="hg_settings_app_version">App version</string>
+    <string name="hg_settings_module_version">Module version</string>
+    <!-- App version summary: version name and code, e.g. "0.3.9.24-alpha (36)" -->
+    <string name="hg_settings_version">%1$s (%2$d)</string>
+    <!-- Module version summary while an installed update waits for a reboot: the running
+         version, e.g. "0.3.9.38-alpha (50)", and the installed one's name ("0.3.9.39-alpha") -->
+    <string name="hg_settings_module_update">%1$s — %2$s installed, reboot to apply</string>
+    <!-- Module version summary's running version when no file or log names it -->
+    <string name="hg_settings_module_unknown">unknown</string>
+    <!-- Module version summary when the module has not published its version this boot (it
+         is not running): the version an earlier boot ran, e.g. "0.3.9.38-alpha (50)" -->
+    <string name="hg_settings_module_not_running">Not running this boot (last: %1$s)</string>
+    <string name="hg_settings_author">Author</string>
+    <string name="hg_settings_author_name" translatable="false">mexus</string>
+    <!-- About: the project's license; a tap opens the license deed in the browser -->
+    <string name="hg_settings_license">License</string>
+    <string name="hg_settings_license_name" translatable="false">CC BY-NC-SA 4.0</string>
+    <string name="hg_settings_license_url" translatable="false">https://creativecommons.org/licenses/by-nc-sa/4.0/</string>
+    <!-- Opens the author's Ko-fi page in the browser -->
+    <string name="hg_settings_kofi">Support on Ko-fi</string>
+    <string name="hg_settings_kofi_summary" translatable="false">ko-fi.com/mexus</string>
+    <string name="hg_settings_kofi_url" translatable="false">https://ko-fi.com/mexus</string>
+    <!-- Toast when no app can open the Ko-fi or license link -->
+    <string name="hg_settings_no_browser">No browser to open the link</string>
+    <!-- About line when the module runs a newer version than this app: the system kept the
+         previous app. Its summary: our versionCode and the module's, e.g. "49", "50" -->
+    <string name="hg_settings_update_not_applied">Update not applied</string>
+    <string name="hg_settings_update_not_applied_summary">The app is version %1$d, the module
+        %2$s: reboot to apply the update</string>
+
+    <!-- Notes at the top when this boot's state and the home app now disagree (HOME is read at
+         boot, so a change applies after a reboot) -->
+    <string name="hg_settings_note_reboot_to_stock">Reboot to switch to HyperOS\'s gestures: the
+        system launcher is the home app now, and HyperGestures stays active until the
+        reboot.</string>
+    <string name="hg_settings_note_reboot_to_ours">Reboot to use HyperGestures: another home app
+        is set now, and HyperOS\'s own gestures and recents stay in use until the
+        reboot.</string>
+    <!-- Notes at the top when HyperGestures does not run this boot for another reason; %1$s is
+         the module's reason, e.g. "provider not bound 60 s after boot, nothing set up" -->
+    <string name="hg_settings_note_rolled_back">HyperGestures rolled back this boot and disabled
+        itself: %1$s. Re-enable it in KernelSU after fixing, then reboot.</string>
+    <string name="hg_settings_note_not_set_up">HyperGestures did not set up this boot:
+        %1$s.</string>
+    <string name="hg_settings_note_refused">HyperGestures did not set up: this phone runs another
+        firmware than it was built for (STRICT_FIRMWARE=1). Rebuild the module for it.</string>
+
+    <!-- About: the module's state this boot (hg_publish_status), one fact per line -->
+    <string name="hg_settings_module_status">Module status</string>
+    <string name="hg_settings_status_unknown">No status from the module for this boot
+        yet</string>
+    <string name="hg_settings_status_starting">Starting (setup not finished)</string>
+    <string name="hg_settings_status_active">Active</string>
+    <string name="hg_settings_status_dormant">Dormant: HyperOS\'s own gestures and recents (the
+        system launcher is the home app)</string>
+    <string name="hg_settings_status_rolled_back">Rolled back and disabled</string>
+    <string name="hg_settings_status_not_set_up">Not set up this boot</string>
+    <string name="hg_settings_status_refused">Refused: another firmware</string>
+    <!-- %1$s: the health check's result, e.g. "ok: provider bound, no crash loop, ..." -->
+    <string name="hg_settings_status_health">Health: %1$s</string>
+    <!-- %1$s: the mount mode, e.g. "auto → self (no active metamodule)"; %2$s: its result -->
+    <string name="hg_settings_status_mount">Mount: %1$s; %2$s</string>
+    <!-- %1$s: the metamodule and its versionCode, e.g. "hybrid_mount 170" -->
+    <string name="hg_settings_status_metamodule">Problem: the metamodule %1$s did not mount the
+        app, so the module mounts it itself</string>
+    <!-- %1$s: e.g. "app 49, module 50" -->
+    <string name="hg_settings_status_stale_apk">Problem: update not applied (%1$s): reboot
+        once more</string>
+    <string name="hg_settings_status_power_pending">Problem: the battery setting \"No
+        restrictions\" is not set yet (retrying); HyperOS may freeze the app briefly</string>
+    <string name="hg_settings_status_restore_gave_up">Problem: undoing HyperGestures\' changes
+        failed on earlier boots; restore them by hand</string>
+
+    <!-- Toast when a setting could not be written -->
+    <string name="hg_settings_write_failed">Could not change the setting</string>
+</resources>

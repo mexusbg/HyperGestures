@@ -1,0 +1,19 @@
+# HyperGestures: R8 rules for the notification icon fix's own APK (com.hypergestures.notif).
+
+# Names as in the source (readable stack traces in LSPosed's log), as the main app does.
+-dontobfuscate
+
+# An LSPosed module entry point: LSPosed loads META-INF/xposed/java_init.list's class by name in
+# SystemUI and the AOD and calls its no-argument constructor and onModuleLoaded/onPackageLoaded;
+# nothing in the APK references it. Kept whole, so R8 neither drops nor merges the entry class,
+# its hook callbacks or the reflection they rely on. Nothing else is in this APK.
+-keep class com.hypergestures.notif.** { *; }
+
+# The libxposed API is compile-only (:xposed-stubs, a library class for R8): LSPosed provides it
+# and refuses a module that bundles its own copy.
+-dontwarn io.github.libxposed.api.**
+
+# Library-only references of the device framework stub to libcore boot classes (as in
+# hg/launcher/proguard.flags, which says why).
+-dontwarn dalvik.system.CloseGuard
+-dontwarn libcore.util.NativeAllocationRegistry

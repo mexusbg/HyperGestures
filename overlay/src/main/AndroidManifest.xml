@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static RRO on `android`: makes SystemUI bind com.hypergestures as the QuickStep provider and
+     grants it the `recents` permissions. Priority 9999 beats Xiaomi's
+     android.miui.home.launcher.res (priority 100) on /product. Spec §6.3. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:hasCode="false" />
+    <overlay
+        android:isStatic="true"
+        android:priority="9999"
+        android:targetPackage="android" />
+</manifest>

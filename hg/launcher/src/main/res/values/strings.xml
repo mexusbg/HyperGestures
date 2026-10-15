@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: strings for the recents card menu entries AOSP does not have (HyperOS's Lock,
+     Floating window), the owner's "Close" label for AOSP's remove-task entry, and HyperOS's
+     recents memory line and Clear all toast texts. -->
+<resources>
+    <!-- Task menu: lock the app so Clear all keeps its card [CHAR LIMIT=30] -->
+    <string name="hg_task_menu_lock">Lock</string>
+    <!-- Task menu: unlock a locked app [CHAR LIMIT=30] -->
+    <string name="hg_task_menu_unlock">Unlock</string>
+    <!-- Task menu: open the app in HyperOS's floating window [CHAR LIMIT=30] -->
+    <string name="hg_task_menu_floating_window">Floating window</string>
+    <!-- Task menu: close the app (remove its task), as swiping the card away [CHAR LIMIT=30] -->
+    <string name="hg_task_menu_close">Close</string>
+    <!-- Content description of the lock badge on a locked recents card -->
+    <string name="hg_task_locked">Locked</string>
+
+    <!-- Recents memory line (HyperOS's status_bar_recent_memory_info1): free of total memory,
+         e.g. "5.3 GB of 16.0 GB available" -->
+    <string name="hg_recents_memory_info">%1$s of %2$s available</string>
+    <!-- An amount of memory in megabytes, e.g. "512 MB" (HyperOS's _mega) -->
+    <string name="hg_recents_memory_mega">%1$s MB</string>
+    <!-- An amount of memory in gigabytes, e.g. "5.3 GB" (HyperOS's _giga) -->
+    <string name="hg_recents_memory_giga">%1$s GB</string>
+
+    <!-- Toast after Clear all freed memory in megabytes, e.g. "512MB cleared" (HyperOS's
+         memory_clear_result_mega, no space) -->
+    <string name="hg_memory_clear_result_mega">%1$sMB cleared</string>
+    <!-- Toast after Clear all freed memory in gigabytes, e.g. "1.2GB cleared" (HyperOS's
+         memory_clear_result_giga) -->
+    <string name="hg_memory_clear_result_giga">%1$sGB cleared</string>
+    <!-- Toast after Clear all freed (almost) no memory (HyperOS's memory_clear_nothing_result) -->
+    <string name="hg_memory_clear_nothing_result">Nothing to clear in cache</string>
+</resources>

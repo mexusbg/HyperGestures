@@ -1,0 +1,130 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Xiaomi's framework files (compile-only stub, framework-res.apk, class list) can't live in
+      # this repo; they come from a private repo, read with a read-only deploy key.
+      - name: Check out device prebuilts
+        uses: actions/checkout@v5
+        with:
+          repository: mexusbg/HyperGestures-prebuilts
+          ssh-key: ${{ secrets.PREBUILTS_DEPLOY_KEY }}
+          path: .prebuilts
+          persist-credentials: false
+      - name: Install device prebuilts
+        run: |
+          mkdir -p prebuilts/device
+          cp .prebuilts/device/* prebuilts/device/
+          rm -rf .prebuilts
+
+      - name: Read version
+        id: version
+        run: |
+          version="$(sed -n 's/^version=//p' version.properties)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version.properties (v$version)"
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-37.0 build-tools;37.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+
+      # gradle.properties asks for an 8 GB Gradle daemon and a 6 GB Kotlin daemon (sized for a
+      # desktop); the hosted runner has less memory, so run Kotlin in the Gradle daemon instead.
+      - name: Fit Gradle to the runner
+        run: |
+          mkdir -p ~/.gradle
+          {
+            echo "org.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+            echo "kotlin.compiler.execution.strategy=in-process"
+            echo "org.gradle.workers.max=2"
+          } >> ~/.gradle/gradle.properties
+
+      - name: Release signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.HG_RELEASE_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Secret HG_RELEASE_KEYSTORE_B64 is not set"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "HG_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build, test and package
+        env:
+          HG_PYTHON: python
+          HG_KEYSTORE_PASSWORD: ${{ secrets.HG_RELEASE_KEYSTORE_PASSWORD }}
+          HG_KEY_ALIAS: ${{ secrets.HG_RELEASE_KEY_ALIAS }}
+          HG_KEY_PASSWORD: ${{ secrets.HG_RELEASE_KEY_PASSWORD }}
+        run: bash tools/build-module.sh
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HyperGestures-${{ steps.version.outputs.version }}
+          path: out/HyperGestures-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/"
+          if-no-files-found: ignore
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: HyperGestures-${{ needs.build.outputs.version }}
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          flags=()
+          case "$VERSION" in *-alpha*|*-beta*|*-rc*) flags+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" "HyperGestures-$VERSION.zip" \
+            --repo "$GITHUB_REPOSITORY" --title "HyperGestures $VERSION" \
+            --generate-notes "${flags[@]}"

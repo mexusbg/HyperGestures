@@ -1,0 +1,6 @@
+id=hypergestures
+name=HyperGestures
+version=@VERSION@
+versionCode=@VERSION_CODE@
+author=mexus
+description=Gesture navigation for HyperOS without MiuiHome (QuickStep provider + overlay)

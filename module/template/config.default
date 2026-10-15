@@ -1,0 +1,44 @@
+# HyperGestures settings, copied to /data/adb/hypergestures/config at the first boot. Change one
+# with setconf.sh, then reboot (it adds a line this file lacks; a missing setting takes its default):
+#   adb shell su -c "sh /data/adb/modules/hypergestures/setconf.sh NAV_MODE threebutton"
+# NAV_MODE: gestural | fsg | threebutton | keep
+#   0.3.x has edge-swipe back (left/right edge). NAV_MODE=gestural is the intended mode; set Nova
+#   (or another launcher) as HOME and reboot: while MiuiHome is HOME the module stays dormant
+#   (stock HyperOS gestures and recents; not a setting, it follows HOME at each boot).
+#   threebutton stays available as a safe fallback.
+NAV_MODE=gestural
+# 1 = stop MiuiHome and deny it background running (HyperOS forbids disabling it; skipped while
+#     it is the home app); 0 = leave it alone
+DISABLE_MIUIHOME=1
+# 1 = keep watching after the health check: fall back to 3-button navigation if SystemUI loses our
+#     provider, and roll back on a crash loop (2 crashes of SystemUI or the app within 10 minutes)
+WATCHDOG=1
+# Firmware policy, for a phone whose ro.build.fingerprint differs from the HyperOS build the app
+# was compiled against (the module's expected-fingerprint; hidden APIs, inlined device resources
+# and binder codes may not match another build; docs/probe-runbook.md §9):
+# 0 = set up anyway, with a notification; the health check below decides.
+# 1 = refuse: the module disables itself at the first boot on another build.
+STRICT_FIRMWARE=0
+# Only with STRICT_FIRMWARE=1: 1 = never refuse (deliberate testing only).
+IGNORE_FINGERPRINT=0
+# Health check (every boot, not a setting): for 120 s after setup, every 15 s, SystemUI must keep
+# the provider bound and neither SystemUI nor com.hypergestures may crash twice; at the end, in
+# gestural mode, our swipe-up gesture monitor must be registered (one retry 15 s later). After
+# that the watchdog (WATCHDOG=1) watches for 2 crashes of either within 10 minutes. On a failure
+# the module rolls back: MiuiHome enabled, the original navigation, HOME = MiuiHome, the module
+# disabled from the next boot, one notification. 3 boots in a row that never reach boot_completed
+# do the same. HEALTH_TEST=fail makes the next boot's check fail once (then it removes itself).
+# MOUNT: auto | metamodule | self (who mounts the module's system/ tree; reboot to apply)
+# auto = mixed while an active KernelSU metamodule is found (the /data/adb/metamodule link, or the
+#     one module whose module.prop says metamodule=1, with metamount.sh, not disabled or marked for
+#     removal): the metamodule (hybrid_mount, meta-overlayfs, ...) mounts system/. Without one: self.
+#     If the metamodule then does not mount the app, the module says so once and mounts it itself
+#     from the next boot on (self); `setconf.sh MOUNT auto` (or an update of the metamodule) tries
+#     the metamodule again.
+# metamodule = always mixed (a working metamodule is required).
+# self = post-fs-data.sh always mounts system/ itself, with the module's skip_mount flag set so no
+#     metamodule mounts it too.
+# setconf.sh and every boot keep skip_mount in step with the mode. In every mode post-fs-data.sh
+#     mounts the recents overlay on /product/overlay itself (a metamodule's mount of it would
+#     break every WebView). action.sh shows the mode as "mount mode:".
+MOUNT=auto

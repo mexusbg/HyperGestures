@@ -1,0 +1,32 @@
+# Private framework resource IDs the build check lets through (Gradle task privateResIdCheck,
+# `python -m tools.hgtools.private_res_ids --check`; docs/research/private-resource-ids.md).
+#
+# javac/kotlinc inline com.android.internal.R constants as the numbering of the firmware the
+# framework stub came from (prebuilts/device). Every other private ID in the release dex fails the
+# build; reachable code resolves its private framework resources by name (HgSysRes) instead.
+# The check also fails when a listed name no longer has its listed ID in
+# prebuilts/device/framework-res.apk, and `--compare <framework-res.apk>` checks the list against
+# a new firmware before an OTA (runbook §9).
+#
+# Format: <0xID> | <type>/<name> | <dex|res> | <reason>
+#   dex: a constant in the release dex (device ID)
+#   res: linked into compiled resources by aapt2 from android.jar (SDK ID), allowlisted in
+#        private-refs-allowlist.txt; acceptable only while the device ID equals it
+
+# --- dex: taskbar / bubble bar code, dead on a phone ---------------------------------------------
+# No TaskbarActivityContext is ever created on a phone: TaskbarManagerImpl returns before
+# createTaskbarActivityContext when PhoneTaskbarPolicy.skipTaskbarWindow (enable_taskbar_on_phones
+# is false, aosp/PATCHES.md 66418c4). The bubble bar, the taskbar's nav buttons and its bar
+# background all live inside it.
+0x010501ec | dimen/importance_ring_stroke_width | dex | taskbar bubbles BubbleCreator: no taskbar on phones
+0x0105022e | dimen/input_method_navigation_bar_height | dex | TaskbarActivityContext.isImeDocked: no taskbar on phones
+0x01080479 | drawable/ic_ime_switcher | dex | taskbar NavbarButtonsViewController IME switcher button: no taskbar on phones
+0x010602bc | color/materialColorInverseOnSurface | dex | taskbar TaskbarOverflowView: no taskbar on phones
+0x010602ca | color/materialColorOnSurface | dex | taskbar bubble bar BubbleBarFlyoutView: no taskbar on phones
+0x010602cb | color/materialColorOnSurfaceVariant | dex | taskbar bubble bar BubbleBarFlyoutView: no taskbar on phones
+0x010602e6 | color/materialColorSurfaceContainer | dex | taskbar bubble bar BubbleBarFlyoutView: no taskbar on phones
+0x010602db | color/materialColorPrimaryFixed | dex | wm-shell-shared bubbles DropTargetView, only built by the taskbar bubble bar drag: no taskbar on phones
+0x0106041f | color/system_bar_background_semi_transparent | dex | sysui-shared BarTransitions.BarBackgroundDrawable, only built for the taskbar nav bar (TaskbarTransitions / NavbarButtonsViewController): no taskbar on phones
+
+# --- res: private refs in compiled XML ----------------------------------------------------------
+0x01060220 | color/customColorSurfaceEffect1 | res | overview_action_button_background_blur.xml (private-refs-allowlist.txt): only applied by OverviewBlurStyle, which RecentsActivity never applies (it forces OverviewBlurFallbackStyle; enable_fallback_overview_in_window=false keeps RecentsWindowManager out); SDK ID = device ID today

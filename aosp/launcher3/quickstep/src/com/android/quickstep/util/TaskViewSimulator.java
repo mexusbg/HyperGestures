@@ -1,0 +1,719 @@
+/*
+ * Copyright (C) 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.android.quickstep.util;
+
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+
+import static com.android.launcher3.states.RotationHelper.deltaRotation;
+import static com.android.launcher3.touch.PagedOrientationHandler.MATRIX_POST_TRANSLATE;
+import static com.android.quickstep.util.RecentsOrientedState.postDisplayRotation;
+import static com.android.quickstep.util.RecentsOrientedState.preDisplayRotation;
+import static com.android.wm.shell.Flags.enableFlexibleTwoAppSplit;
+import static com.android.wm.shell.shared.split.SplitScreenConstants.SPLIT_POSITION_BOTTOM_OR_RIGHT;
+import static com.android.wm.shell.shared.split.SplitScreenConstants.SPLIT_POSITION_TOP_OR_LEFT;
+import static com.android.wm.shell.shared.split.SplitScreenConstants.SPLIT_POSITION_UNDEFINED;
+
+import android.animation.TimeInterpolator;
+import android.content.Context;
+import android.content.res.Resources;
+import android.graphics.Matrix;
+import android.graphics.PointF;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.util.Log;
+import android.view.RemoteAnimationTarget;
+import android.view.SurfaceControl;
+import android.view.animation.Interpolator;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.android.launcher3.DeviceProfile;
+import com.android.launcher3.Utilities;
+import com.android.launcher3.anim.AnimatedFloat;
+import com.android.launcher3.anim.PendingAnimation;
+import com.android.launcher3.util.TraceHelper;
+import com.android.quickstep.BaseActivityInterface;
+import com.android.quickstep.BaseContainerInterface;
+import com.android.quickstep.DesktopFullscreenDrawParams;
+import com.android.quickstep.FallbackWindowInterface;
+import com.android.quickstep.FullscreenDrawParams;
+import com.android.quickstep.HgCornerGeometry;
+import com.android.quickstep.TaskAnimationManager;
+import com.android.quickstep.util.SurfaceTransaction.SurfaceProperties;
+import com.android.systemui.shared.recents.model.ThumbnailData;
+import com.android.systemui.shared.recents.utilities.PreviewPositionHelper;
+import com.android.wm.shell.shared.split.SplitBounds;
+import com.android.wm.shell.shared.split.SplitScreenConstants;
+
+/**
+ * A utility class which emulates the layout behavior of TaskView and RecentsView
+ */
+public class TaskViewSimulator implements TransformParams.BuilderProxy {
+
+    private static final String TAG = "TaskViewSimulator";
+    private static final boolean DEBUG = false;
+
+    private final Rect mTmpCropRect = new Rect();
+    private final RectF mTempRectF = new RectF();
+    private final float[] mTempPoint = new float[2];
+
+    private final Context mContext;
+    private final BaseContainerInterface mSizeStrategy;
+
+    @NonNull
+    private RecentsOrientedState mOrientationState;
+    private final boolean mIsRecentsRtl;
+
+    private final Rect mTaskRect = new Rect();
+    private final Rect mFullTaskSize = new Rect();
+    private final Rect mCarouselTaskSize = new Rect();
+    private PointF mPivotOverride = null;
+    private final PointF mPivot = new PointF();
+    private DeviceProfile mDp;
+    @SplitScreenConstants.SplitPosition
+    private int mSplitPosition = SPLIT_POSITION_UNDEFINED;
+
+    private final Matrix mMatrix = new Matrix();
+    private final Matrix mMatrixTmp = new Matrix();
+
+    // Thumbnail view properties
+    private final Rect mThumbnailPosition = new Rect();
+    private final ThumbnailData mThumbnailData = new ThumbnailData();
+    private final PreviewPositionHelper mPositionHelper = new PreviewPositionHelper();
+    private final Matrix mInversePositionMatrix = new Matrix();
+
+    // TaskView properties
+    private final FullscreenDrawParams mCurrentFullscreenParams;
+    public final AnimatedFloat taskPrimaryTranslation = new AnimatedFloat();
+    public final AnimatedFloat taskSecondaryTranslation = new AnimatedFloat();
+    public final AnimatedFloat taskGridTranslationX = new AnimatedFloat();
+    public final AnimatedFloat taskGridTranslationY = new AnimatedFloat();
+    // HyperGestures: the card's scale about its centre and x offset in MIUI's stack layout
+    // (HgStackLayout, TaskView.hgStackScale / hgStackTranslationX); 1 and 0 elsewhere.
+    public final AnimatedFloat hgStackScale = new AnimatedFloat();
+    public final AnimatedFloat hgStackTranslationX = new AnimatedFloat();
+    // HyperGestures: MIUI's vertical layout (HgVerticalLayout): the card's y offset into its
+    // grid slot (TaskView.hgStackTranslationY; its x offset is hgStackTranslationX), the grid's
+    // overscroll, and whether it applies: there the dismiss translation moves the card
+    // sideways (part of hgStackTranslationX), so taskSecondaryTranslation is not applied.
+    public final AnimatedFloat hgStackTranslationY = new AnimatedFloat();
+    public float hgOverScrollY;
+    public boolean hgVertical;
+    private final float[] mHgMatrixValues = new float[9];
+    // HyperGestures: the vertical layout's fade of a card scrolled above the top edge
+    // (TaskView.hgScrollAlpha), on the live tile through the target alpha; 1 elsewhere.
+    public final AnimatedFloat hgAlpha = new AnimatedFloat();
+    // HyperGestures: how far hgClipTop cropped the window's top this frame (window px).
+    private float mHgClipCropped;
+    // HyperGestures: the corner drag (HgCornerDrag) shrinks the window held over a top corner's
+    // target, as MiuiHome's card: toward HgCornerGeometry.FLOATING_CARD_SCALE about its centre
+    // by hgCornerFloating (into the floating frame), and into hgCornerSplitTarget (screen px
+    // {left, top, right, bottom}) by hgCornerSplit (the split panel's top-left). Applied after
+    // every other step, so it shrinks the card wherever the layout put it; 0 elsewhere.
+    public final AnimatedFloat hgCornerFloating = new AnimatedFloat();
+    public final AnimatedFloat hgCornerSplit = new AnimatedFloat();
+    public final float[] hgCornerSplitTarget = new float[4];
+    private final RectF mHgCornerBase = new RectF();
+    private final float[] mHgCornerFit = new float[3];
+
+    // Carousel properties
+    public final AnimatedFloat carouselScale = new AnimatedFloat();
+
+    // RecentsView properties
+    public final AnimatedFloat recentsViewScale = new AnimatedFloat();
+    public final AnimatedFloat fullScreenProgress = new AnimatedFloat();
+    public final AnimatedFloat recentsViewSecondaryTranslation = new AnimatedFloat();
+    public final AnimatedFloat recentsViewPrimaryTranslation = new AnimatedFloat();
+    public final AnimatedFloat recentsViewScroll = new AnimatedFloat();
+
+    // Cached calculations
+    private boolean mLayoutValid = false;
+    private int mOrientationStateId;
+    private SplitBounds mSplitBounds;
+    private Boolean mDrawsBelowRecents = null;
+    private Boolean mDrawAboveOtherApps = null;
+    private boolean mIsGridTask;
+    private final boolean mIsDesktopTask;
+    private boolean mIsAnimatingToCarousel = false;
+    private final int mDesktopTaskIndex;
+
+    @Nullable
+    private Matrix mTaskRectTransform = null;
+    @Nullable
+    private Matrix mTaskRectTransformInverse = null;
+
+    public TaskViewSimulator(Context context, BaseContainerInterface sizeStrategy,
+            boolean isDesktop, int desktopTaskIndex) {
+        mContext = context;
+        mSizeStrategy = sizeStrategy;
+        mIsDesktopTask = isDesktop;
+        mDesktopTaskIndex = desktopTaskIndex;
+
+        mOrientationState = TraceHelper.allowIpcs("TaskViewSimulator.init",
+                () -> new RecentsOrientedState(context, sizeStrategy));
+        mOrientationState.setGestureActive(true);
+        mCurrentFullscreenParams = mIsDesktopTask
+                ? new DesktopFullscreenDrawParams(context)
+                : new FullscreenDrawParams(context);
+        mOrientationStateId = mOrientationState.getStateId();
+        Resources resources = context.getResources();
+        mIsRecentsRtl = mOrientationState.getOrientationHandler().getRecentsRtlSetting(resources);
+        carouselScale.value = 1f;
+        hgStackScale.value = 1f; // HyperGestures
+        hgAlpha.value = 1f; // HyperGestures
+    }
+
+    /**
+     * Sets the device profile for the current state
+     */
+    public void setDp(DeviceProfile dp) {
+        mDp = dp;
+        mLayoutValid = false;
+        mOrientationState.setDeviceProfile(dp);
+        mIsGridTask = dp.getDeviceProperties().isLargeScreen() && !mIsDesktopTask;
+        calculateTaskSize();
+    }
+
+    /**
+     * Updates the task size.
+     */
+    public void calculateTaskSize() {
+        if (mDp == null) {
+            return;
+        }
+
+        if (mIsGridTask) {
+            mSizeStrategy.calculateGridTaskSize(mContext, mDp, mFullTaskSize,
+                    mOrientationState.getOrientationHandler());
+            mSizeStrategy.calculateTaskSize(mContext, mDp, mCarouselTaskSize,
+                    mOrientationState.getOrientationHandler());
+        } else {
+            mSizeStrategy.calculateTaskSize(mContext, mDp, mFullTaskSize,
+                    mOrientationState.getOrientationHandler());
+            mCarouselTaskSize.set(mFullTaskSize);
+        }
+
+        if (mSplitBounds != null) {
+            // The task rect changes according to the staged split task sizes, but recents
+            // fullscreen scale and pivot remains the same since the task fits into the existing
+            // sized task space bounds
+            mTaskRect.set(mFullTaskSize);
+            mOrientationState.getOrientationHandler()
+                    .setSplitTaskSwipeRect(mDp, mTaskRect, mSplitBounds, mSplitPosition);
+        } else if (mIsDesktopTask) {
+            // For desktop, tasks can take up only part of the screen size.
+            // Full task size represents the whole screen size, but scaled down to fit in recents.
+            // Task rect will represent the scaled down thumbnail position and is placed inside
+            // full task size as it is on the home screen.
+            PointF fullscreenTaskDimension = new PointF();
+            BaseActivityInterface.getTaskDimension(mDp, fullscreenTaskDimension);
+            // Calculate the scale down factor used in recents
+            float scale = mFullTaskSize.width() / fullscreenTaskDimension.x;
+            mTaskRect.set(mThumbnailPosition);
+            mTaskRect.scale(scale);
+            // Ensure the task rect is inside the full task rect
+            mTaskRect.offset(mFullTaskSize.left, mFullTaskSize.top);
+
+            Rect taskDimension = new Rect(0, 0, (int) fullscreenTaskDimension.x,
+                    (int) fullscreenTaskDimension.y);
+            mTmpCropRect.set(mThumbnailPosition);
+            if (mTmpCropRect.setIntersect(taskDimension, mThumbnailPosition)) {
+                mTmpCropRect.offset(-mThumbnailPosition.left, -mThumbnailPosition.top);
+            } else {
+                mTmpCropRect.setEmpty();
+            }
+        } else {
+            mTaskRect.set(mFullTaskSize);
+        }
+    }
+
+    /**
+     * Sets the orientation state used for this animation
+     */
+    public void setOrientationState(@NonNull RecentsOrientedState orientationState) {
+        mOrientationState = orientationState;
+        mLayoutValid = false;
+    }
+
+    /**
+     * @see com.android.quickstep.views.RecentsView#FULLSCREEN_PROGRESS
+     */
+    public float getFullScreenScale() {
+        if (mDp == null) {
+            return 1;
+        }
+        float scale = mOrientationState.getFullScreenScaleAndPivot(
+                mIsAnimatingToCarousel ? mCarouselTaskSize : mFullTaskSize, mDp, mPivot);
+        if (mPivotOverride != null) {
+            mPivot.set(mPivotOverride);
+        }
+        return scale;
+    }
+
+    /**
+     * Sets the targets which the simulator will control specifically for targets to animate when
+     * in split screen
+     *
+     * @param splitInfo set to {@code null} when not in staged split mode
+     */
+    public void setPreview(RemoteAnimationTarget runningTarget, SplitBounds splitInfo) {
+        mSplitBounds = splitInfo;
+        if (mSplitBounds == null) {
+            setPreviewBounds(
+                    runningTarget.startBounds != null
+                            ? runningTarget.startBounds : runningTarget.screenSpaceBounds,
+                    runningTarget.contentInsets);
+            mSplitPosition = SPLIT_POSITION_UNDEFINED;
+        } else {
+            // Always use the end bounds for split as we may be reparenting the task from fullscreen
+            setPreviewBounds(runningTarget.screenSpaceBounds, runningTarget.contentInsets);
+            mSplitPosition = runningTarget.taskId == splitInfo.leftTopTaskId
+                    ? SPLIT_POSITION_TOP_OR_LEFT : SPLIT_POSITION_BOTTOM_OR_RIGHT;
+            if (enableFlexibleTwoAppSplit()) {
+                mPositionHelper.setSplitBounds(mSplitBounds, mSplitPosition);
+            }
+        }
+        calculateTaskSize();
+    }
+
+    /**
+     * Sets the targets which the simulator will control
+     */
+    public void setPreviewBounds(Rect bounds, Rect insets) {
+        mThumbnailData.insets.set(insets);
+        // TODO: What is this?
+        mThumbnailData.windowingMode = WINDOWING_MODE_FULLSCREEN;
+
+        mThumbnailPosition.set(bounds);
+        mLayoutValid = false;
+    }
+
+    /**
+     * Updates the scroll for RecentsView
+     */
+    public void setScroll(float scroll) {
+        recentsViewScroll.value = scroll;
+    }
+
+    public void setDrawsBelowRecents(boolean drawsBelowRecents) {
+        mDrawsBelowRecents = drawsBelowRecents;
+    }
+
+    public boolean getDrawsBelowRecents() {
+        return mDrawsBelowRecents != null ? mDrawsBelowRecents : false;
+    }
+
+    /**
+     * Sets whether the task is part of overview grid and not being focused.
+     */
+    public void setIsGridTask(boolean isGridTask) {
+        mIsGridTask = isGridTask;
+    }
+
+    /**
+     * Sets whether drawing this app above other apps during animation. It's currently used when
+     * activating an app window from the exploded desktop view which will launch the desktop tile
+     * and exit Overview.
+     */
+    public void setDrawsAboveOtherApps(boolean drawsAboveOtherApps) {
+        mDrawAboveOtherApps = drawsAboveOtherApps;
+    }
+
+    /**
+     * Override the pivot used to apply scale changes.
+     */
+    public void setPivotOverride(PointF pivotOverride) {
+        mPivotOverride = pivotOverride;
+        getFullScreenScale();
+    }
+
+    /**
+     * Adds animation for all the components corresponding to transition from an app to carousel.
+     */
+    public void addAppToCarouselAnim(PendingAnimation pa, Interpolator interpolator,
+            boolean isHandlingAtomicEvent) {
+        pa.addFloat(fullScreenProgress, AnimatedFloat.VALUE, 1, 0, interpolator);
+        if (mDp.getDeviceProperties().isLargeScreen() && !isHandlingAtomicEvent) {
+            mIsAnimatingToCarousel = true;
+            carouselScale.value = mCarouselTaskSize.width() / (float) mFullTaskSize.width();
+        }
+        pa.addFloat(recentsViewScale, AnimatedFloat.VALUE, getFullScreenScale(), 1,
+                interpolator);
+    }
+
+    /**
+     * Adds animation for all the components corresponding to transition from overview to the app.
+     */
+    public void addOverviewToAppAnim(PendingAnimation pa, TimeInterpolator interpolator) {
+        pa.addFloat(fullScreenProgress, AnimatedFloat.VALUE, 0, 1, interpolator);
+        pa.addFloat(recentsViewScale, AnimatedFloat.VALUE, 1, getFullScreenScale(), interpolator);
+        // HyperGestures: a card in the stack layout's deck or the vertical layout's grid grows
+        // out of it to full screen.
+        if (hgStackScale.value != 1f || hgStackTranslationX.value != 0f
+                || hgStackTranslationY.value != 0f) {
+            pa.addFloat(hgStackScale, AnimatedFloat.VALUE, hgStackScale.value, 1, interpolator);
+            pa.addFloat(hgStackTranslationX, AnimatedFloat.VALUE, hgStackTranslationX.value, 0,
+                    interpolator);
+            pa.addFloat(hgStackTranslationY, AnimatedFloat.VALUE, hgStackTranslationY.value, 0,
+                    interpolator);
+        }
+        // HyperGestures: a card faded above the vertical layout's top edge shows fully again.
+        if (hgAlpha.value != 1f) {
+            pa.addFloat(hgAlpha, AnimatedFloat.VALUE, hgAlpha.value, 1, interpolator);
+        }
+        // HyperGestures: a card still shrunk by the corner drag grows back with it.
+        if (hgCornerFloating.value != 0f || hgCornerSplit.value != 0f) {
+            pa.addFloat(hgCornerFloating, AnimatedFloat.VALUE, hgCornerFloating.value, 0,
+                    interpolator);
+            pa.addFloat(hgCornerSplit, AnimatedFloat.VALUE, hgCornerSplit.value, 0, interpolator);
+        }
+    }
+
+    /**
+     * Returns the current clipped/visible window bounds in the window coordinate space
+     */
+    public RectF getCurrentCropRect() {
+        // Crop rect is the inverse of thumbnail matrix
+        mTempRectF.set(0, 0, mTaskRect.width(), mTaskRect.height());
+        mInversePositionMatrix.mapRect(mTempRectF);
+        return mTempRectF;
+    }
+
+    /**
+     * Returns the current task bounds in the Launcher coordinate space.
+     */
+    public RectF getCurrentRect() {
+        RectF result = getCurrentCropRect();
+        mMatrixTmp.set(mMatrix);
+        preDisplayRotation(mOrientationState.getDisplayRotation(), mDp.getDeviceProperties().getWidthPx(), mDp.getDeviceProperties().getHeightPx(),
+                mMatrixTmp);
+        mMatrixTmp.mapRect(result);
+        return result;
+    }
+
+    public RecentsOrientedState getOrientationState() {
+        return mOrientationState;
+    }
+
+    /**
+     * Returns the current transform applied to the window
+     */
+    public Matrix getCurrentMatrix() {
+        return mMatrix;
+    }
+
+    /**
+     * Sets a matrix used to transform the position of tasks. If set, this matrix is applied to
+     * the task rect after the task has been scaled and positioned inside the fulltask, but
+     * before scaling and translation of the whole recents view is performed.
+     */
+    public void setTaskRectTransform(@Nullable Matrix taskRectTransform) {
+        mTaskRectTransform = taskRectTransform;
+        if (mTaskRectTransform != null) {
+            // The inverse transform is used to adjust the corner radius of tasks. Since not all
+            // tasks will have a taskRectTransform, we construct it lazily.
+            if (mTaskRectTransformInverse == null) {
+                mTaskRectTransformInverse = new Matrix();
+            }
+            mTaskRectTransform.invert(mTaskRectTransformInverse);
+        }
+    }
+
+    /**
+     * Calculates the crop rect for desktop tasks given the current matrix.
+     */
+    private void calculateDesktopTaskCropRect() {
+        // The approach here is to map a rect that represents the untransformed thumbnail position
+        // using the current matrix. This will give us a rect that can be intersected with
+        // [mFullTaskSize]. Using the intersection, we then compute how much of the task window that
+        // needs to be cropped (which will be nothing if the window is entirely within the desktop).
+        mTempRectF.set(0, 0, mThumbnailPosition.width(), mThumbnailPosition.height());
+        mMatrix.mapRect(mTempRectF);
+
+        float offsetX = mTempRectF.left;
+        float offsetY = mTempRectF.top;
+        float scale = mThumbnailPosition.width() / mTempRectF.width();
+
+        if (mTempRectF.intersect(mFullTaskSize.left, mFullTaskSize.top, mFullTaskSize.right,
+                mFullTaskSize.bottom)) {
+            mTempRectF.offset(-offsetX, -offsetY);
+            mTempRectF.scale(scale);
+            mTempRectF.round(mTmpCropRect);
+        }
+    }
+
+    /**
+     * Applies the rotation on the matrix to so that it maps from launcher coordinate space to
+     * window coordinate space.
+     */
+    public void applyWindowToHomeRotation(Matrix matrix) {
+        matrix.postTranslate(mDp.getDeviceProperties().getWindowX(), mDp.getDeviceProperties().getWindowY());
+        postDisplayRotation(deltaRotation(
+                        mOrientationState.getRecentsActivityRotation(),
+                        mOrientationState.getDisplayRotation()),
+                mDp.getDeviceProperties().getWidthPx(), mDp.getDeviceProperties().getHeightPx(), matrix);
+    }
+
+    /**
+     * Applies the target to the previously set parameters
+     */
+    public void apply(TransformParams params) {
+        apply(params, null);
+    }
+
+    /**
+     * Applies the target to the previously set parameters, optionally with an overridden
+     * surface transaction
+     */
+    public void apply(TransformParams params, @Nullable SurfaceTransaction surfaceTransaction) {
+        if (mDp == null || mThumbnailPosition.isEmpty()) {
+            return;
+        }
+        if (!mLayoutValid || mOrientationStateId != mOrientationState.getStateId()) {
+            mLayoutValid = true;
+            mOrientationStateId = mOrientationState.getStateId();
+
+            getFullScreenScale();
+            if (TaskAnimationManager.SHELL_TRANSITIONS_ROTATION) {
+                // With shell transitions, the display is rotated early so we need to actually use
+                // the rotation when the gesture starts
+                mThumbnailData.rotation = mOrientationState.getTouchRotation();
+            } else {
+                mThumbnailData.rotation = mOrientationState.getDisplayRotation();
+            }
+
+            // mIsRecentsRtl is the inverse of TaskView RTL.
+            boolean isRtlEnabled = !mIsRecentsRtl;
+            mPositionHelper.updateThumbnailMatrix(
+                    mThumbnailPosition, mThumbnailData, mTaskRect.width(), mTaskRect.height(),
+                    mDp.getDeviceProperties().isLargeScreen(),
+                    mOrientationState.getRecentsActivityRotation(), isRtlEnabled,
+                    mContext.getResources().getDisplayMetrics().densityDpi);
+            mPositionHelper.getMatrix().invert(mInversePositionMatrix);
+            if (DEBUG) {
+                Log.d(TAG, " taskRect: " + mTaskRect);
+            }
+        }
+
+        float fullScreenProgress = Utilities.boundToRange(this.fullScreenProgress.value, 0, 1);
+        // HyperGestures: the stack layout's scale shrinks the window too; keep its corners as the
+        // card's (1 outside the stack layout).
+        mCurrentFullscreenParams.setProgress(fullScreenProgress, recentsViewScale.value,
+                carouselScale.value * hgStackScale.value);
+
+        // Apply thumbnail matrix
+        float taskWidth = mTaskRect.width();
+        float taskHeight = mTaskRect.height();
+
+        mMatrix.set(mPositionHelper.getMatrix());
+
+        // Apply TaskView matrix: taskRect, optional transform, translate
+        mMatrix.postTranslate(mTaskRect.left, mTaskRect.top);
+        if (mTaskRectTransform != null) {
+            mMatrix.postConcat(mTaskRectTransform);
+
+            // Calculate cropping for desktop tasks. The order is important since it uses the
+            // current matrix. Therefore we calculate it here, after applying the task rect
+            // transform, but before applying scaling/translation that affects the whole
+            // recentsview.
+            if (mIsDesktopTask) {
+                calculateDesktopTaskCropRect();
+            }
+        }
+        // HyperGestures: the stack layout's scale about the card's centre, then its offset, as
+        // the TaskView applies them (scale about its pivot, then its translations); the vertical
+        // layout's offset into the grid and the grid's overscroll.
+        if (hgStackScale.value != 1f || hgStackTranslationX.value != 0f
+                || hgStackTranslationY.value != 0f || hgOverScrollY != 0f) {
+            mMatrix.postScale(hgStackScale.value, hgStackScale.value,
+                    mFullTaskSize.exactCenterX(), mFullTaskSize.exactCenterY());
+            mMatrix.postTranslate(hgStackTranslationX.value,
+                    hgStackTranslationY.value + hgOverScrollY);
+        }
+
+        mOrientationState.getOrientationHandler().setPrimary(mMatrix, MATRIX_POST_TRANSLATE,
+                taskPrimaryTranslation.value);
+        if (!hgVertical) { // HyperGestures: see hgVertical
+            mOrientationState.getOrientationHandler().setSecondary(mMatrix, MATRIX_POST_TRANSLATE,
+                    taskSecondaryTranslation.value);
+        }
+        mMatrix.postTranslate(taskGridTranslationX.value, taskGridTranslationY.value);
+
+        mMatrix.postScale(carouselScale.value, carouselScale.value,
+                mIsRecentsRtl ? mCarouselTaskSize.right : mCarouselTaskSize.left,
+                mCarouselTaskSize.top);
+
+        mOrientationState.getOrientationHandler().setPrimary(
+                mMatrix, MATRIX_POST_TRANSLATE, recentsViewScroll.value);
+
+        // Apply RecentsView matrix
+        mMatrix.postScale(recentsViewScale.value, recentsViewScale.value, mPivot.x, mPivot.y);
+        mOrientationState.getOrientationHandler().setSecondary(mMatrix, MATRIX_POST_TRANSLATE,
+                recentsViewSecondaryTranslation.value);
+        mOrientationState.getOrientationHandler().setPrimary(mMatrix, MATRIX_POST_TRANSLATE,
+                recentsViewPrimaryTranslation.value);
+        if (hgCornerFloating.value != 0f || hgCornerSplit.value != 0f) {
+            hgApplyCorner(taskWidth, taskHeight); // HyperGestures: see hgCornerFloating
+        }
+        applyWindowToHomeRotation(mMatrix);
+
+        if (!mIsDesktopTask) {
+            // Crop rect is the inverse of thumbnail matrix
+            mTempRectF.set(0, 0, taskWidth, taskHeight);
+            mInversePositionMatrix.mapRect(mTempRectF);
+            mTempRectF.roundOut(mTmpCropRect);
+            // HyperGestures: RecentsView clips the vertical layout's grid at the status bar;
+            // clip the live tile there too, fully as a card, less as it grows to full screen.
+            mHgClipCropped = 0f;
+            if (hgVertical) hgClipTop(mDp.getInsets().top * (1f - fullScreenProgress));
+        }
+
+        params.setProgress(1f - fullScreenProgress);
+        params.applySurfaceParams(surfaceTransaction == null
+                ? params.createSurfaceParams(this) : surfaceTransaction);
+
+        if (!DEBUG) {
+            return;
+        }
+        Log.d(TAG, "progress: " + fullScreenProgress
+                + " carouselScale: " + carouselScale.value
+                + " recentsViewScale: " + recentsViewScale.value
+                + " crop: " + mTmpCropRect
+                + " radius: " + getCurrentCornerRadius()
+                + " taskW: " + taskWidth + " H: " + taskHeight
+                + " taskRect: " + mTaskRect
+                + " taskPrimaryT: " + taskPrimaryTranslation.value
+                + " taskSecondaryT: " + taskSecondaryTranslation.value
+                + " taskGridTranslationX: " + taskGridTranslationX.value
+                + " taskGridTranslationY: " + taskGridTranslationY.value
+                + " recentsPrimaryT: " + recentsViewPrimaryTranslation.value
+                + " recentsSecondaryT: " + recentsViewSecondaryTranslation.value
+                + " recentsScroll: " + recentsViewScroll.value
+                + " pivot: " + mPivot
+        );
+    }
+
+    /**
+     * HyperGestures: the corner drag's shrink (hgCornerFloating), about the centre of the card's
+     * visible rect as the matrix has placed it so far (the same rect getCurrentRect reports).
+     */
+    private void hgApplyCorner(float taskWidth, float taskHeight) {
+        mHgCornerBase.set(0, 0, taskWidth, taskHeight);
+        mInversePositionMatrix.mapRect(mHgCornerBase);
+        mMatrix.mapRect(mHgCornerBase);
+        float[] t = hgCornerSplitTarget;
+        HgCornerGeometry.cardTransform(mHgCornerBase.left, mHgCornerBase.top,
+                mHgCornerBase.right, mHgCornerBase.bottom, hgCornerFloating.value,
+                t[0], t[1], t[2], t[3], hgCornerSplit.value, mHgCornerFit);
+        mMatrix.postScale(mHgCornerFit[0], mHgCornerFit[0],
+                mHgCornerBase.centerX(), mHgCornerBase.centerY());
+        mMatrix.postTranslate(mHgCornerFit[1], mHgCornerFit[2]);
+    }
+
+    /**
+     * HyperGestures: crops the window so it shows nothing above screen y {@code clipY} (the
+     * matrix maps the crop's window coordinates to the screen; upright, so only scale and move).
+     */
+    private void hgClipTop(float clipY) {
+        mMatrix.getValues(mHgMatrixValues);
+        float scaleY = mHgMatrixValues[Matrix.MSCALE_Y];
+        if (scaleY <= 0f || mHgMatrixValues[Matrix.MSKEW_Y] != 0f || clipY <= 0f) return;
+        float top = (clipY - mHgMatrixValues[Matrix.MTRANS_Y]) / scaleY;
+        if (top > mTmpCropRect.top) {
+            int cropped = Math.min(mTmpCropRect.bottom, (int) Math.ceil(top));
+            mHgClipCropped = cropped - mTmpCropRect.top;
+            mTmpCropRect.top = cropped;
+        }
+    }
+
+    /**
+     * HyperGestures: the corner radius, less as hgClipTop crops the top: the canvas-clipped cards
+     * end straight at the status bar, and a surface has one radius for all four corners, so it
+     * fades out over the first radius of crop (window px, as both are).
+     */
+    private float hgCornerRadius() {
+        float radius = getCurrentCornerRadius();
+        if (mHgClipCropped <= 0f || radius <= 0f) return radius;
+        return radius * Math.max(0f, 1f - mHgClipCropped / radius);
+    }
+
+    @Override
+    public void onBuildTargetParams(
+            SurfaceProperties builder, RemoteAnimationTarget app, TransformParams params) {
+        builder.setMatrix(mMatrix)
+                .setWindowCrop(mTmpCropRect)
+                .setCornerRadius(hgCornerRadius()); // HyperGestures: was getCurrentCornerRadius
+        // HyperGestures: the vertical layout's fade, on top of the target alpha this proxy's
+        // targets were just given (TransformParams.createSurfaceParams).
+        if (hgAlpha.value != 1f) builder.setAlpha(params.getTargetAlpha() * hgAlpha.value);
+
+        if (mDrawsBelowRecents == null && mDrawAboveOtherApps == null) {
+            // No reordering will be enforced.
+            return;
+        }
+
+        // In shell transitions, the animation leashes are reparented to an animation container
+        // so we can bump layers as needed.
+        int baseLayer = app.prefixOrderIndex - mDesktopTaskIndex;
+        // 1000/2000 are arbitrary numbers to give room for multiple layers.
+        if (mDrawsBelowRecents != null) {
+            baseLayer += mDrawsBelowRecents ? Integer.MIN_VALUE + 2000 :  Integer.MAX_VALUE - 2000;
+        }
+        if (mDrawAboveOtherApps != null && mDrawAboveOtherApps) {
+            baseLayer += 1000;
+        }
+        SurfaceControl overviewOverlay;
+        if (mSizeStrategy instanceof FallbackWindowInterface windowInterface
+                && (overviewOverlay = windowInterface.getOverviewOverlay()) != null
+                && app.taskInfo.getActivityType() != ACTIVITY_TYPE_HOME) {
+            // the Overview surface will live on the overviewOverlayLayer meaning that we
+            // allow taskview simulator be set above/below this layer as needed for animations.
+            builder.setRelativeLayer(overviewOverlay, baseLayer);
+        } else {
+            builder.setLayer(baseLayer);
+        }
+    }
+
+    /**
+     * Returns the corner radius that should be applied to the target so that it matches the
+     * TaskView
+     */
+    public float getCurrentCornerRadius() {
+        float visibleRadius = mCurrentFullscreenParams.getCurrentCornerRadius();
+        mTempPoint[0] = visibleRadius;
+        mTempPoint[1] = 0;
+        mInversePositionMatrix.mapVectors(mTempPoint);
+
+        // If this task has another transform of it, then its scale also needs to be taken into
+        // consideration for the radius.
+        if (mTaskRectTransform != null && mTaskRectTransformInverse != null) {
+            mTaskRectTransformInverse.mapVectors(mTempPoint);
+        }
+
+        // Ideally we should use square-root. This is an optimization as one of the dimension is 0.
+        return Math.max(Math.abs(mTempPoint[0]), Math.abs(mTempPoint[1]));
+    }
+
+    /**
+     * Returns the corner radius that is actually visible on screen, once the transforms are applied
+     * to the window.
+     */
+    public float getScaledCornerRadius() {
+        return mMatrix.mapRadius(getCurrentCornerRadius());
+    }
+}

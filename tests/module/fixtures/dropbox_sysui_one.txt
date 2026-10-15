@@ -1,0 +1,22 @@
+Drop box contents: 213 entries
+Max entries: 1000
+Low priority rate limit period: 2000 ms
+Low priority tags: {data_app_wtf, system_server_wtf, keymaster, system_server_strictmode, data_app_strictmode}
+Searching for: system_app_crash
+
+========================================
+2026-09-29 14:40:12 system_app_crash (text, 4570 bytes)
+Process: com.android.systemui
+PID: 12990
+UID: 10187
+Flags: 0x30c8be4d
+Package: com.android.systemui v36 (17)
+Foreground: Yes
+Process-Runtime: 582114
+Build: Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.11.XPAEUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.IllegalArgumentException: back: bad KeyEvent source
+	at com.android.wm.shell.back.BackAnimationController.onBackEvent(BackAnimationController.java:377)
+

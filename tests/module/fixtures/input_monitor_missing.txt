@@ -1,0 +1,14 @@
+INPUT MANAGER (dumpsys input)
+
+Input Manager Service (Java) State:
+  Gesture Monitors:
+Input Dispatcher State:
+  DispatchEnabled: true
+  DispatchFrozen: false
+  InputFilterEnabled: false
+  Display: 0
+    logicalDisplayId=0
+    Windows:
+      0: name=[Gesture Monitor] edge-swipe, id=406, displayId=0, inputConfig=NOT_FOCUSABLE | TRUSTED_OVERLAY | SPY, alpha=1.00, frame=[0,0][0,0], globalScale=1.000000, applicationInfo.name=, applicationInfo.token=<null>, touchableRegion=[0,0][1080,2400], ownerPid=2311, ownerUid=10187, dispatchingTimeout=5000ms, hasToken=true, touchOcclusionMode=BLOCK_UNTRUSTED
+      1: name=[Gesture Monitor] swipe-up, id=402, displayId=0, inputConfig=NOT_FOCUSABLE | TRUSTED_OVERLAY | SPY, alpha=1.00, frame=[0,0][0,0], globalScale=1.000000, applicationInfo.name=, applicationInfo.token=<null>, touchableRegion=[0,0][1080,2400], ownerPid=6120, ownerUid=10098, dispatchingTimeout=5000ms, hasToken=true, touchOcclusionMode=BLOCK_UNTRUSTED
+      2: name=Window{5e8a3c1 u0 com.teslacoilsw.launcher/com.teslacoilsw.launcher.NovaLauncher}, id=388, displayId=0, inputConfig=DUPLICATE_TOUCH_TO_WALLPAPER, alpha=1.00, frame=[0,0][1080,2400], globalScale=1.000000, ownerPid=5023, ownerUid=10233, dispatchingTimeout=5000ms, hasToken=true, touchOcclusionMode=BLOCK_UNTRUSTED

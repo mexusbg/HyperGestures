@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: night variant of color/hg_shade_panel_fg (device res/color-night-v8/shade_panel_fg_color.xml). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@android:color/system_accent1_800" android:alpha="0.32" />
+</selector>

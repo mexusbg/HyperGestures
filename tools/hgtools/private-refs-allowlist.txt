@@ -1,0 +1,18 @@
+# Private framework resource references that the build guard (Gradle task checkPrivateRes,
+# `python -m tools.hgtools.res_preprocess --check-private`) lets through.
+#
+# Every entry is a reference the rewrite could NOT resolve by the rules in
+# tools/hgtools/res_preprocess.py (public SDK 37 name → @android:; else the device framework-res
+# value → public ref or literal). aapt2 links these against android.jar's PRIVATE IDs. "SDK id" /
+# "device id" below compare android-37.0/android.jar with prebuilts/device/framework-res.apk:
+# an entry is acceptable only while they are equal. That is checked, not left to memory: each
+# entry here has a `res` row with its ID in tools/hgtools/private-res-ids-allowlist.txt, which the
+# release build's privateResIdCheck verifies against prebuilts/device/framework-res.apk and
+# `python -m tools.hgtools.private_res_ids --compare <framework-res.apk>` against a new firmware
+# before an OTA (docs/probe-runbook.md §9). The refs
+# whose ids differed (textColorOnAccent, shade_panel_*) and colorAccentPrimary were rewritten in
+# an aosp-patch instead (aosp/PATCHES.md).
+#
+# Format: <repo-relative path> | <reference exactly as written> | <reason>
+
+aosp/launcher3/quickstep/res/drawable/overview_action_button_background_blur.xml | @*android:color/customColorSurfaceEffect1 | config-dependent on device (default → system_surface_effect_1_light, night → _dark), so no single literal; SDK id = device id = 0x01060220, resolves correctly today

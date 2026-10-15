@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: local copy of the framework-private color/shade_panel_fg (res/color/shade_panel_fg_color.xml in the device framework-res.apk); the private id differs between SDK 37 and the device, so it cannot be referenced. Only public colors are used, so dynamic theming is kept. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@android:color/system_accent1_100" android:alpha="0.32" />
+</selector>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: the app icon's themed-icon layer (hg_ic_launcher): the same card stack in one
+     colour; the front card's bar is cut out (even-odd) so it still shows. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.4"
+        android:pathData="M32,37h14a6,6 0,0 1,6,6v28a6,6 0,0 1,-6,6h-14a6,6 0,0 1,-6,-6v-28a6,6 0,0 1,6,-6z" />
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.65"
+        android:pathData="M38.5,34h15.0a6.5,6.5 0,0 1,6.5,6.5v31.0a6.5,6.5 0,0 1,-6.5,6.5h-15.0a6.5,6.5 0,0 1,-6.5,-6.5v-31.0a6.5,6.5 0,0 1,6.5,-6.5z" />
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+        android:pathData="M49.5,30h17.0a7.5,7.5 0,0 1,7.5,7.5v35.0a7.5,7.5 0,0 1,-7.5,7.5h-17.0a7.5,7.5 0,0 1,-7.5,-7.5v-35.0a7.5,7.5 0,0 1,7.5,-7.5zM51.5,72h13.0a1.5,1.5 0,0 1,1.5,1.5v0.0a1.5,1.5 0,0 1,-1.5,1.5h-13.0a1.5,1.5 0,0 1,-1.5,-1.5v-0.0a1.5,1.5 0,0 1,1.5,-1.5z" />
+</vector>

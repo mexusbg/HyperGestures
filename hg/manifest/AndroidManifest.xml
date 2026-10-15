@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Empty manifest for AOSP-source modules with nothing to declare (buildSrc/src/main/kotlin/AospModule.kt). -->
+<manifest />

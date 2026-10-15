@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: the MIUI-style recents theme overlay (HgRecentsBlur) and the settings page
+     theme. -->
+<resources>
+    <!-- RecentsActivity with a blurred background: AOSP's OverviewBlurStyle (the actions styled
+         for blur), with a light dim instead of its 50% scrim, so the blurred wallpaper shows
+         through as in HyperOS's recents. -->
+    <style name="HgOverviewBlurStyle" parent="OverviewBlurStyle">
+        <item name="overviewScrimColor">@color/hg_overview_scrim</item>
+    </style>
+
+    <!-- The settings page (HgSettingsActivity): Material 3, light or dark with the system. -->
+    <style name="HgSettingsTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="preferenceTheme">@style/PreferenceThemeOverlay</item>
+    </style>
+</resources>

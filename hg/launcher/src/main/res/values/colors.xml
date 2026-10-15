@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: colours of the MIUI-style recents. -->
+<resources>
+    <!-- The dim over recents' blurred wallpaper (HgOverviewBlurStyle): light, as HyperOS's. -->
+    <color name="hg_overview_scrim">#38000000</color>
+    <!-- The dim over a sharp wallpaper when recents cannot blur (HgRecentsBlur.scrimColor):
+         dark enough for the white headers and memory line over a bright wallpaper (MiuiHome's
+         recents covers use #80000000 too). -->
+    <color name="hg_overview_scrim_no_blur">#80000000</color>
+    <!-- The solid fill of the frosted elements when recents cannot blur (HgBlurSupport):
+         MiuiHome's dark clear-all disc (btn_clear_all, #3B3B3B), 90% opaque. -->
+    <color name="hg_solid_fill">#E63B3B3B</color>
+</resources>

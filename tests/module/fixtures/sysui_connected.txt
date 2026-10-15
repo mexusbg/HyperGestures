@@ -1,0 +1,10 @@
+    LauncherProxyService state:
+      isConnected=true
+      mIsEnabled=true
+      mRecentsComponentName=ComponentInfo{com.hypergestures/com.android.quickstep.RecentsActivity}
+      mQuickStepIntent=Intent { act=android.intent.action.QUICKSTEP_SERVICE xflg=0x4 pkg=com.hypergestures }
+      mBound=true
+      mCurrentBoundedUserId=0
+      mActiveNavBarRegion=SkRegion((124,2466,956,2608))
+    SysUiState state:
+      mSysUiStateFlags=268566528

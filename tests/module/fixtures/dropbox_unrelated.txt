@@ -1,0 +1,36 @@
+Drop box contents: 214 entries
+Max entries: 1000
+Low priority rate limit period: 2000 ms
+Low priority tags: {data_app_wtf, system_server_wtf, keymaster, system_server_strictmode, data_app_strictmode}
+Searching for: data_app_crash
+
+========================================
+2026-09-29 14:30:20 data_app_crash (text, 3120 bytes)
+Process: com.example.notes
+PID: 12004
+UID: 10244
+Flags: 0x38c8be44
+Package: com.example.notes v112 (3.4.1)
+Foreground: Yes
+Process-Runtime: 5410
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.RuntimeException: Unable to start activity ComponentInfo{com.example.notes/com.example.notes.Main}
+	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:4280)
+
+========================================
+2026-09-29 14:30:50 data_app_crash (text, 2980 bytes)
+Process: com.android.systemuix
+PID: 12230
+UID: 10251
+Flags: 0x38c8be44
+Package: com.android.systemuix v1 (1.0)
+Foreground: No
+Process-Runtime: 911
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.IllegalStateException: a package whose name only starts like the SystemUI package
+	at com.android.systemuix.Main.onCreate(Main.java:12)
+

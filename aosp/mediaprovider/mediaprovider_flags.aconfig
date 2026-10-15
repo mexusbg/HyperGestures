@@ -1,0 +1,598 @@
+package: "com.android.providers.media.flags"
+container: "com.android.mediaprovider"
+
+flag {
+    name: "enable_modern_photopicker"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag controls whether the modern photopicker is enabled"
+    bug: "303779617"
+}
+
+flag {
+    name: "pick_ordered_images"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag controls whether to enable ordered selection in photopicker"
+    bug: "303784642"
+}
+
+flag {
+    name: "picker_default_tab"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable launching the photopicker in the requested tab/activity"
+    bug: "303783867"
+}
+
+flag {
+    name: "access_media_owner_package_name_permission"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "Controls exposure of the ACCESS_MEDIA_OWNER_PACKAGE_NAME permission name"
+    bug: "309920631"
+}
+
+flag {
+    name: "picker_recent_selection"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable selection of items based on recency of selection in picker choice."
+    bug: "323132658"
+}
+
+flag {
+    name: "picker_accent_color"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable setting an accent color in the photopicker"
+    bug: "303784053"
+}
+
+flag {
+    name: "picker_pre_selection_extra"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable accepting of URIs for pre-selection as an intent extra."
+    bug: "333038370"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "media_cognition_service"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable the abstract service for media cognition processes"
+    bug: "331771553"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_media_search"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag exposes the API contract for media search"
+    bug: "442600609"
+}
+
+flag {
+    name: "version_lockdown"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable updates to MediaStore versioning to make it more unique across apps."
+    bug: "343977174"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_stable_uris_for_external_primary_volume"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable stable uris for external primary volume"
+    bug: "213931581"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_stable_uris_for_public_volume"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable stable uris for public volume"
+    bug: "213931581"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_backup_and_restore"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable backup and restore feature"
+    bug: "195138692"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_embedded_photopicker"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag controls whether the embedded photopicker is enabled"
+    bug: "353634929"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_oem_metadata"
+    is_exported: true
+    is_fixed_read_only: true
+    namespace: "mediaprovider"
+    description: "This flag will enable support for OEM metadata column"
+    bug: "352528480"
+}
+
+flag {
+    name: "media_store_open_file"
+    is_exported: true
+    is_fixed_read_only: true
+    namespace: "mediaprovider"
+    description: "This flag will enable new APIs for opening media files through MediaStore"
+    bug: "356147697"
+}
+
+flag {
+    name: "inferred_media_date"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "Controls exposure of inferred_media_date column"
+    bug: "352524889"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "audio_sample_columns"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "Controls exposure of bits_per_sample and samplerate audio columns"
+    bug: "352523369"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_photopicker_search"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag controls whether to enable search feature in photopicker"
+    bug: "361026918"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_photopicker_datescrubber"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag controls whether to enable datescrubber feature in photopicker"
+    bug: "312640456"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_photopicker_location_metadata"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag controls whether to enable location metadata feature in photopicker"
+    bug: "462002765"
+}
+
+flag {
+    name: "cloud_media_provider_search"
+    is_exported: true
+    namespace: "mediaprovider"
+    is_fixed_read_only: true
+    description: "This flag will enable the apis for cloud media provider to donate search results"
+    bug: "316356081"
+}
+
+flag {
+    name: "enable_mark_media_as_favorite_api"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "Enables mark media as favorite API"
+    bug: "294364218"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_unicode_check"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag controls whether the unicode check is enabled"
+    bug: "263914218"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "index_media_latitude_longitude"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag controls the indexing of latitude and longitude for both new and existing on-device media items"
+    bug: "361019344"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_photopicker_transcoding"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag controls whether to enable transcoding feature in photopicker"
+    bug: "367886883"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_cloud_media_provider_capabilities"
+    namespace: "mediaprovider"
+    description: "This flag controls the Capabilities APIs in CloudMediaProvider and the contract."
+    bug: "370445733"
+    is_fixed_read_only: true
+    is_exported: true
+}
+
+flag {
+    name: "motion_photo_intent"
+    is_exported: true
+    namespace: "mediaprovider"
+    is_fixed_read_only: true
+    description: "This flag will enable the motion photo capture intents."
+    bug: "362580165"
+}
+
+flag {
+    name: "enable_mark_is_favorite_status_api"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "Enables mark media as favorite API"
+    is_fixed_read_only: true
+    bug: "294364218"
+}
+
+flag {
+    name: "revoke_access_owned_photos"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable allowing users to revoke access to app created photos."
+    is_fixed_read_only: true
+    bug: "323322157"
+}
+
+flag {
+    name: "enable_exclusion_list_for_default_folders"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will prevent folders on the exclusion list being created during default folder creation."
+    is_fixed_read_only: true
+    bug: "381310841"
+}
+
+flag {
+    name: "exclude_unreliable_volumes"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable exclusion of unreliable storage volumes in the returned list from MediaStore APIs."
+    is_fixed_read_only: true
+    bug: "391360514"
+}
+
+flag {
+    name: "enable_mime_type_fix_for_android_15"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag enables the fix for MIME type mapping in Android 15, correcting the faulty mime.types entries."
+    is_fixed_read_only: true
+    bug: "376910932"
+}
+
+flag {
+    name: "enable_oem_metadata_update"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "Controls ability to update oem_metadata column"
+    bug: "352528913"
+    is_fixed_read_only: true
+}
+
+flag {
+    name: "enable_local_media_provider_capabilities"
+    namespace: "mediaprovider"
+    description: "This flag controls the Capabilities APIs in the local media provider, i.e. PhotoPickerProvider."
+    bug: "402379523"
+    is_fixed_read_only: true
+    is_exported: true
+}
+
+flag {
+    name: "enable_oem_metadata_using_mimetype"
+    namespace: "mediaprovider"
+    description: "Controls ability to fetch OEM metadata using file mime type"
+    is_fixed_read_only: true
+    is_exported: true
+    bug: "410763330"
+}
+
+flag {
+    name: "query_leveldb_for_file_attributes"
+    namespace: "mediaprovider"
+    description: "This flag enables MP to query file attributes from backup levelDb database for file open calls."
+    is_fixed_read_only: true
+    is_exported: false
+    bug: "388432933"
+}
+
+flag {
+    name: "enable_picker_highlight_search_results_apis"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable highlighting search results APIs in the photopicker."
+    is_fixed_read_only: true
+    bug: "409508015"
+}
+
+flag {
+    name: "cloud_provider_albums_as_category_api"
+    namespace: "mediaprovider"
+    description: "This flags will unhide the user albums category type and make it public."
+    is_fixed_read_only: true
+    is_exported: true
+    bug: "414528325"
+}
+
+flag {
+    name: "fetch_cloud_albums_as_categories"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag will enable querying cloud albums as a category in the photopicker."
+    is_fixed_read_only: true
+    bug: "416012542"
+}
+
+flag {
+    name: "enable_trash_and_restore_by_file_path_api"
+    namespace: "mediaprovider"
+    description: "Enables new APIs for trashing and restoring files/folders by file path"
+    is_fixed_read_only: true
+    is_exported: true
+    bug: "421847749"
+}
+
+flag {
+    name: "enable_custom_work_manager_thread_pool"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables custom thread pool executor for work manager "
+    is_fixed_read_only: true
+    bug: "421129366"
+}
+
+flag {
+    name: "enable_next_generation_number"
+    namespace: "mediaprovider"
+    description: "This change enables saving next generation in level db. Will be used to recover data during rollback"
+    is_fixed_read_only: true
+    bug: "366245256"
+}
+
+flag {
+    name: "enable_generation_number_recovery"
+    namespace: "mediaprovider"
+    description: "This change enables generation number recover data during rollback"
+    is_fixed_read_only: true
+    bug: "445895660"
+}
+
+flag {
+    name: "enable_media_background_thread"
+    namespace: "mediaprovider"
+    description: "Enables MediaBackgroundThread to do all mediaprovider related background tasks"
+    is_fixed_read_only: true
+    bug: "432208806"
+}
+
+flag {
+    name: "enable_parallel_fuse_dir_ops"
+    namespace: "mediaprovider"
+    description: "Enables parallel FUSE directory operations"
+    is_fixed_read_only: true
+    is_exported: false
+    bug: "428016109"
+}
+
+flag {
+    name: "enable_photopicker_thumbnail_preload"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables image thumbnail preloading in photopicker"
+    bug: "407099745"
+}
+
+flag {
+    name: "enable_special_format_column"
+    is_exported: true
+    is_fixed_read_only: true
+    namespace: "mediaprovider"
+    description: "This flag will enable support for the special format column"
+    bug: "346244100"
+}
+
+flag {
+    name: "photopicker_polaroid"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag controls the camera feature in photopicker"
+    bug: "303784048"
+}
+
+flag {
+    name: "enable_media_documents_provider_allfiles_root"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables a new Root in MediaDocumentsProvider that surfaces all file types"
+    bug: "444316005"
+}
+
+flag {
+    name: "enable_embedded_picker_expanded_highlight_type_api"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will enable expanded highlight type for the embedded picker."
+    bug: "435395584"
+}
+
+flag {
+    name: "enable_modern_photopicker_cloud_settings_page"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables cloud settings page implementation in modern photopicker"
+    bug: "445045054"
+}
+
+flag {
+    name: "enable_xattr_removal_for_removed_users"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables removal of xattr recovery data for removed users"
+    bug: "424426960"
+}
+
+flag {
+    name: "enable_media_processing_service"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag exposes the API contract for abstract Media Processing Service"
+    bug: "428139451"
+}
+
+flag {
+  name: "enable_photopicker_desktop"
+  namespace: "mediaprovider"
+  description: "Enables desktop UI in photopicker"
+  is_exported: false
+  bug: "438571449"
+}
+
+flag {
+    name: "enable_picker_location_metadata_api"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag will control the rollout of the photopicker location metadata feature."
+    bug: "457454437"
+}
+
+flag {
+    name: "enable_photopicker_delete_history_suggestion"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables option to delete photopicker search history suggestions"
+    bug: "412985514"
+}
+
+flag {
+    name: "enable_photopicker_offline_banners"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "Enables offline banners shown when there is no network connection available on the device."
+    bug: "412985507"
+}
+
+flag {
+    name: "enable_media_processing"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables media processing - location, metadata and media labels - for local search"
+    bug: "428140009"
+}
+
+flag {
+    name: "enable_photopicker_selection_params_usage"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "Enables usage of selection params api in photopicker."
+    bug: "467334899"
+}
+
+flag {
+    name: "enable_photopicker_ui_customization_params_usage"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "Enables usage of ui customization params api in photopicker."
+    bug: "467914970"
+}
+
+flag {
+    name: "enable_photopicker_selection_params_api"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag exposes the APIs for applying constraints on selectable media items."
+    bug: "467334899"
+}
+
+flag {
+    name: "enable_photopicker_ui_customization_params_api"
+    is_exported: true
+    namespace: "mediaprovider"
+    description: "This flag exposes the APIs for UI customization in the Photo Picker."
+    bug: "462035251"
+}
+
+flag {
+    name: "enable_photopicker_banner_redesign"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables the refactored photopicker banner design"
+    bug: "477014801"
+}
+
+flag {
+    name: "enable_local_search_for_photopicker"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables local search for photopicker"
+    bug: "477829610"
+}
+
+flag {
+    name: "enable_cmp_improvements"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag pushes the missing CMP requirements to implement cloud media provider."
+    bug: "478186126"
+}
+
+flag {
+    name: "enable_mime_type_update_on_rename"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables updating the mime type when renaming a file."
+    bug: "481516249"
+}
+
+flag {
+    name: "enable_embedded_picker_v2_apis"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag exposes the apis for embedded picker v2."
+    bug: "492382057"
+}
+
+flag {
+    name: "enable_embedded_picker_v2"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables the usage of apis added for embedded picker v2."
+    bug: "492382057"
+}
+
+flag {
+    name: "enable_async_thumbnail_generation"
+    is_exported: false
+    namespace: "mediaprovider"
+    description: "This flag enables async thumbnail generation."
+    bug: "484046262"
+}

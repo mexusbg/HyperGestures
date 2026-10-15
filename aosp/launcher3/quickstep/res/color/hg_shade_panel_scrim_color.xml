@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: local copy of the framework-private color/shade_panel_scrim_color (res/color/shade_panel_scrim_color.xml in the device framework-res.apk, no night variant); the private id differs between SDK 37 and the device, so it cannot be referenced. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="#ff404040" android:alpha="0.4" />
+</selector>

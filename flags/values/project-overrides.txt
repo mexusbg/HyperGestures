@@ -1,0 +1,11 @@
+# Highest precedence. Every line needs a reason.
+# HyperOS SystemUI draws NavigationBar0 itself in fsg mode; the provider must not create a taskbar on
+# phones. Revisit once flags/values/device.txt exists.
+com.android.wm.shell.enable_taskbar_on_phones=false
+# Keep the RecentsActivity fallback path (spec §6.1); AOSP has no value (DISABLED) — pinned explicitly.
+com.android.launcher3.enable_fallback_overview_in_window=false
+# The fallback provider on a phone has no keyboard gestures to handle, and HyperOS keeps
+# RECENT_APPS/RECENT_APPS_SWITCHER for itself: registering our KeyGestureEventHandler fails, and
+# RetryingExecutor then retried every 5 s forever (review 2026-09-30 B1). Off: no registration, no
+# retry, and nothing to unregister on a SystemUI disconnect. Contradicts device.txt on purpose.
+com.android.window.flags.grant_manage_key_gestures_to_recents=false

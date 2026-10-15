@@ -1,0 +1,8 @@
+package: com.hypergestures
+uses-permission: name='android.permission.MONITOR_INPUT'
+uses-permission: name='android.permission.STATUS_BAR_SERVICE'
+uses-permission: name='android.permission.ACCESS_CONTEXTUAL_SEARCH'
+uses-permission-sdk-23: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.MONITOR_INPUT'
+permission: com.hypergestures.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+uses-permission: name='com.hypergestures.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'

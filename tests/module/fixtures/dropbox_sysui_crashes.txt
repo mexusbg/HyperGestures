@@ -1,0 +1,54 @@
+Drop box contents: 214 entries
+Max entries: 1000
+Low priority rate limit period: 2000 ms
+Low priority tags: {data_app_wtf, system_server_wtf, keymaster, system_server_strictmode, data_app_strictmode}
+Searching for: system_app_crash
+
+========================================
+2026-09-29 09:12:03 system_app_crash (text, 4211 bytes)
+Process: com.android.systemui
+PID: 2311
+UID: 10187
+Flags: 0x30c8be4d
+Package: com.android.systemui v36 (17)
+Foreground: Yes
+Process-Runtime: 4020731
+Build: Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.11.XPAEUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.IllegalStateException: an old crash, from before this boot's setup
+	at com.android.systemui.recents.LauncherProxyService$1.onServiceConnected(LauncherProxyService.java:812)
+
+========================================
+2026-09-29 14:30:05 system_app_crash (text, 4567 bytes)
+Process: com.android.systemui
+PID: 11381
+UID: 10187
+Flags: 0x30c8be4d
+Package: com.android.systemui v36 (17)
+Foreground: Yes
+Process-Runtime: 38422
+Build: Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.11.XPAEUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.NullPointerException: Attempt to invoke virtual method on a null object reference
+	at com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler.onInputEvent(EdgeBackGestureHandler.java:1042)
+
+========================================
+2026-09-29 14:30:41.518 system_app_crash (text, 4569 bytes)
+Process: com.android.systemui
+PID: 11620
+UID: 10187
+Flags: 0x30c8be4d
+Package: com.android.systemui v36 (17)
+Foreground: Yes
+Process-Runtime: 30117
+Build: Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.11.XPAEUXM:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.NullPointerException: Attempt to invoke virtual method on a null object reference
+	at com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler.onInputEvent(EdgeBackGestureHandler.java:1042)
+

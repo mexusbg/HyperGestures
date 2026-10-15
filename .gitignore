@@ -1,0 +1,53 @@
+# Gradle / Android
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Device binaries (Xiaomi / proprietary) — generated or pulled locally, never committed
+/prebuilts/device/
+/tools/bin/
+
+# Module packaging output
+/out/
+
+# AI assistant / agent files: kept local, never committed
+/.superpowers/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.cursor/
+.cursorrules
+.windsurfrules
+.github/copilot-instructions.md
+.aider*
+.codex/
+.gemini/
+
+# Release signing: keys never enter git (CI reads the release key from its secrets)
+/keystore/
+*.jks
+*.keystore
+
+# Local scratch (photos, recordings, phone captures)
+/temp-demo/
+/temp-captures/
+
+# Python
+__pycache__/
+*.pyc
+
+# Phone logs, screenshots and UI dumps (personal data): kept local only
+docs/logs/
+
+# Documentation, knowledge and research notes stay local: no Markdown in git except the README
+/docs/
+*.md
+!/README.md

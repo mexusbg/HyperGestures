@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The LSPosed module's name in LSPosed's list; the main app's settings page names it -->
+    <string name="hg_notif_label">HyperGestures notification icons</string>
+    <string name="hg_notif_description">Real app icons in notifications instead of white squares
+        (System UI and AOD). Switched on and off in HyperGestures\' settings, System, Fix
+        notification icons.</string>
+</resources>

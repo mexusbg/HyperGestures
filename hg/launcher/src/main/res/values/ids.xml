@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: view tag keys. -->
+<resources>
+    <!-- The round background HgBlurSupport.followGlassCircle last gave a view. -->
+    <item name="hg_glass_circle_res" type="id" />
+</resources>

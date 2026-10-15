@@ -1,0 +1,38 @@
+# HyperGestures additions to AOSP's Launcher3 R8 rules (aosp/launcher3/proguard.flags).
+
+# Soong does not obfuscate unless `optimize.obfuscate: true`, which Launcher3QuickStep leaves
+# unset, so neither do we (readable device stack traces too). Build map §3.8's other reason,
+# ResourceBasedOverride's by-name class instantiation, no longer applies: no vendored AOSP 17
+# Launcher3 source defines or uses ResourceBasedOverride.
+-dontobfuscate
+
+# The device framework stub (prebuilts/device/framework.jar, a compile-only library for R8) refers
+# to two libcore boot classes that live in core-libart/core-oj on the device, not in framework.jar
+# or the SDK android.jar (missing_rules.txt): android.content.ContentProviderClient.mCloseGuard and
+# 5 other contexts reference dalvik.system.CloseGuard; HardwareBuffer.getRegistry(long) references
+# libcore.util.NativeAllocationRegistry. Only library classes reference them; the device's boot
+# classpath provides them at runtime. Named exactly (not dalvik.system.**/libcore.**) so a future
+# stub regeneration surfacing an unrelated missing libcore/dalvik class still fails the build.
+-dontwarn dalvik.system.CloseGuard
+-dontwarn libcore.util.NativeAllocationRegistry
+
+# protobuf-lite builds each message's schema by reflecting over its generated fields
+# (MessageSchema.reflectField), so they must survive shrinking. The protobuf-javalite artifact ships
+# this rule as a consumer rule; the vendored runtime we compile against does not. Without it the
+# first logged event (e.g. LauncherWithoutFocusInputConsumer.onSwipeUp) crashes with
+# "Field bitField0_ for ...LauncherAtom$WorkspaceContainer not found".
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite { <fields>; }
+
+# PluginManagerImpl.addPluginListener reads @ProvidesInterface from the plugin interface class at
+# runtime. R8 otherwise merges an interface into its only implementer (ResourceProvider into
+# DynamicResource: "class ...DynamicResource doesn't provide an interface" on the swipe-home
+# animation). Keep the plugin interfaces as they are.
+-keep interface com.android.systemui.plugins.** { *; }
+-keep @com.android.systemui.plugins.annotations.ProvidesInterface class * { *; }
+
+# EdgeBackOverlay.Root overrides ViewGroup.onChildVisibilityChanged, a @hide framework hook the
+# SDK android.jar does not declare; kept so R8 never treats it as an unused method (the edge-back
+# window would then stay invisible and the arrow never show).
+-keepclassmembers class com.android.quickstep.interaction.EdgeBackOverlay$Root {
+    protected void onChildVisibilityChanged(android.view.View, int, int);
+}

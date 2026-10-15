@@ -1,0 +1,6 @@
+Drop box contents: 213 entries
+Max entries: 1000
+Searching for: system_app_crash
+
+*** SERVICE 'dropbox' DUMP TIMEOUT (10000ms) EXPIRED ***
+

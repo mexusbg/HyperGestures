@@ -1,0 +1,7 @@
+flag_value {
+  package: "com.example.flags"
+  name: "enable_foo_bar"
+  state: DISABLED
+  permission: READ_ONLY
+}
+flag_value { package: "com.example.flags" name: "exported_thing" state: ENABLED permission: READ_ONLY }

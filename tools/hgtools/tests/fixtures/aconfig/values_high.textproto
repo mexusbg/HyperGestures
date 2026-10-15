@@ -1,0 +1,6 @@
+flag_value {
+  package: "com.example.flags"
+  name: "enable_foo_bar"
+  state: ENABLED
+  permission: READ_ONLY
+}

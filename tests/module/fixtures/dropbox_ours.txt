@@ -1,0 +1,51 @@
+Drop box contents: 216 entries
+Max entries: 1000
+Low priority rate limit period: 2000 ms
+Low priority tags: {data_app_wtf, system_server_wtf, keymaster, system_server_strictmode, data_app_strictmode}
+Searching for: system_app_crash
+
+========================================
+2026-09-29 14:30:09 system_app_crash (text, 3877 bytes)
+Process: com.hypergestures
+PID: 7450
+UID: 10315
+Flags: 0x30c8be4d
+Package: com.hypergestures v4 (0.3.1-alpha)
+Foreground: No
+Process-Runtime: 20411
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.SecurityException: Permission Denial: MONITOR_INPUT
+	at com.android.quickstep.TouchInteractionService.initInputMonitor(TouchInteractionService.java:702)
+
+========================================
+2026-09-29 14:30:33 system_app_crash (text, 3877 bytes)
+Process: com.hypergestures:gestures
+PID: 7702
+UID: 10315
+Flags: 0x30c8be4d
+Package: com.hypergestures v4 (0.3.1-alpha)
+Foreground: No
+Process-Runtime: 18093
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.SecurityException: Permission Denial: MONITOR_INPUT
+	at com.android.quickstep.TouchInteractionService.initInputMonitor(TouchInteractionService.java:702)
+
+========================================
+2026-09-29 14:30:44 system_app_crash (text, 1022 bytes)
+Process: com.hypergestures.helper
+PID: 7810
+UID: 10316
+Flags: 0x30c8be4d
+Package: com.hypergestures.helper v1 (1.0)
+Foreground: No
+Process-Runtime: 301
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+java.lang.IllegalStateException: another package whose name only starts like ours
+	at com.hypergestures.helper.Main.onCreate(Main.java:9)
+

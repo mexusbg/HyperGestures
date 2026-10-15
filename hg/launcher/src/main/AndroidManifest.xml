@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: recents-only QuickStep provider overlay. AGP allows one manifest per source
+     set, so this is the manifest of both the debug and release source sets (build-type manifests
+     merge over main). It adds the contextual-search permission (not in AOSP's manifest; spec
+     §2.6) and the module's notification receiver (HgNotifyReceiver), sets the app label, turns
+     backup off, and trims the AOSP launcher/settings surface this
+     recents-only app must not expose (spec §6.1; tools/hgtools/manifest_contract.py enforces it):
+     - the secondary-display home entry point (category.SECONDARY_HOME), the Settings activity
+       (APPLICATION_PREFERENCES) with the search-indexables provider that dereferences it, and the
+       drag-and-drop pin-shortcut/widget activity;
+     - the rest of a home launcher's surface, which the system only offers or binds for the default
+       home app, each an exported entry point we don't need: QuickstepAddItemActivity (CONFIRM_PIN_*
+       from the launcher-apps service), QuickstepWidgetPickerActivity (ACTION_PICK widget picker),
+       CueBarInsightRendererService (ambient-cue insight renderer, bound only by the system's
+       personal-context service; app code only calls its static listener registry),
+       NotificationListener (notification dots on home icons; it would also be listed under
+       Notification access), the androidx app-function services (their app_functions.xml is not even
+       packaged), and SessionCommitReceiver / AppWidgetsRestoredReceiver (add installed apps and
+       restored widgets to the home workspace);
+     - backup: no backup agent, allowBackup="false", no fullBackupContent (a full-backup teardown or
+       restore would kill the gesture service).
+     Added: the settings page (HgSettingsActivity, MAIN/LAUNCHER), Save logs' permissions, a
+     BOOT_COMPLETED receiver (HgBootReceiver) for the hide-gesture-line overlay and the App info
+     trampoline (HgAppInfoTrampoline, APPLICATION_DETAILS_SETTINGS).
+     Kept: TouchInteractionService, RecentsActivity, the providers model code may query, the gesture
+     tutorial/onboarding activities, and non-exported helpers. It does not pin the recents component;
+     that is decided at runtime by OverviewComponentObserver/OverviewTargetPolicy and named by the
+     overlay module. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.ACCESS_CONTEXTUAL_SEARCH" />
+    <!-- HyperOS's MiuiMultiWindowUtils (corner drag: can this app float?) asks
+         ISecurityManager.getCurrentUserId, which needs it; without it every finger move of a
+         gesture threw and printed a SecurityException stack trace. Privileged: allowlisted. -->
+    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
+    <!-- The memory line writes MIUI's Settings.System miui_recents_show_mem_info (HgRamIndicator).
+         WRITE_SECURE_SETTINGS already lets SettingsProvider skip the WRITE_SETTINGS app-op and
+         privileged apps may write non-public System keys; this is belt and braces. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- A dismissed card's app and Clear all's apps are killed with
+         ActivityManager.killBackgroundProcesses (HgProcessKill): HyperOS 4 refuses its own
+         ProcessManager.kill to every caller but a few hard-coded system apps. Android 14+ lets
+         only KILL_ALL_BACKGROUND_PROCESSES holders (signature|privileged: allowlisted) kill other
+         packages' processes. -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+    <uses-permission android:name="android.permission.KILL_ALL_BACKGROUND_PROCESSES" />
+    <!-- Save logs on the settings page (HgLogCollector): logcat -d of all buffers, and dumpsys of
+         recents, activities and our TouchInteractionService. Privileged: allowlisted. -->
+    <uses-permission android:name="android.permission.READ_LOGS" />
+    <uses-permission android:name="android.permission.DUMP" />
+    <!-- HyperOS's ActivityManager dump also requires it ("Permission Denial: can't dump
+         ActivityManager ... missing PACKAGE_USAGE_STATS"; owner's log, 2026-10-10). Privileged. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <!-- "Hide gesture line" (HgHideGestureLine): enabling our fabricated overlay on
+         SystemUI passes OverlayManagerService's actor check through this legacy permission,
+         since SystemUI declares no <overlayable>. Privileged: allowlisted. -->
+    <uses-permission android:name="android.permission.CHANGE_OVERLAY_PACKAGES" />
+
+    <application
+        tools:replace="android:label,android:allowBackup,android:icon,android:roundIcon"
+        tools:remove="android:backupAgent,android:fullBackupOnly,android:backupInForeground,android:fullBackupContent"
+        android:allowBackup="false"
+        android:icon="@drawable/hg_ic_launcher"
+        android:roundIcon="@drawable/hg_ic_launcher"
+        android:label="HyperGestures">
+        <activity
+            android:name="com.android.launcher3.secondarydisplay.SecondaryDisplayLauncher"
+            tools:node="remove" />
+        <activity
+            android:name="com.android.launcher3.settings.SettingsActivity"
+            tools:node="remove" />
+        <provider
+            android:name="com.android.quickstep.LauncherSearchIndexablesProvider"
+            tools:node="remove" />
+        <activity
+            android:name="com.android.launcher3.dragndrop.AddItemActivity"
+            tools:node="remove" />
+        <activity
+            android:name="com.android.launcher3.QuickstepAddItemActivity"
+            tools:node="remove" />
+        <activity
+            android:name="com.android.launcher3.QuickstepWidgetPickerActivity"
+            tools:node="remove" />
+        <service
+            android:name="com.android.launcher3.taskbar.CueBarInsightRendererService"
+            tools:node="remove" />
+        <service
+            android:name="com.android.launcher3.notification.NotificationListener"
+            tools:node="remove" />
+        <service
+            android:name="androidx.appfunctions.service.PlatformAppFunctionService"
+            tools:node="remove" />
+        <service
+            android:name="androidx.appfunctions.service.ExtensionAppFunctionService"
+            tools:node="remove" />
+        <receiver
+            android:name="com.android.launcher3.SessionCommitReceiver"
+            tools:node="remove" />
+        <receiver
+            android:name="com.android.launcher3.AppWidgetsRestoredReceiver"
+            tools:node="remove" />
+
+        <!-- The settings page (HgSettingsActivity), the app's icon in the home app. Its label and
+             icon are the application's: the literal "HyperGestures" label still shows where our
+             APK can't be opened (KernelSU hides module mounts from other apps).
+             Its own process (":settings"; Save logs' thread runs in it too): a crash of the page
+             is not a crash of the recents and gesture provider, so the module's crash watch
+             ignores exactly com.hypergestures:settings (HG_CRASH_IGNORED), and dismissing its
+             card (removeTask kills the task's processes) leaves the provider running. The page
+             only reads and writes Settings and our external files dir, never the provider's
+             in-process state. Its own task affinity keeps its recents card apart. -->
+        <activity
+            android:name="com.android.quickstep.HgSettingsActivity"
+            android:exported="true"
+            android:process=":settings"
+            android:taskAffinity="com.hypergestures.settings"
+            android:theme="@style/HgSettingsTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- "Fix App info back" (HgAppInfoTrampoline): takes every app's standard App info
+             request and opens Security's App info the MiuiHome way, so Back from App permissions
+             returns to it. Priority 100 beats AOSP Settings' own filter for the action
+             (android:priority="1" on .applications.InstalledAppDetails in Settings'
+             AndroidManifest.xml); PackageManager honours a priority above 0 only for privileged
+             apps, which we are. Invisible (Theme.NoDisplay, finishes in onCreate), no history,
+             no recents card, its own empty affinity, no launcher entry. In the settings page's
+             ":settings" process: an App info request never cold-starts the gesture provider, and
+             the module's crash watch ignores that process (HG_CRASH_IGNORED). Its switch
+             (hypergestures_app_info_fix) enables or disables this component, so off is stock
+             resolution with no hop. -->
+        <activity
+            android:name="com.android.quickstep.HgAppInfoTrampoline"
+            android:exported="true"
+            android:process=":settings"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter android:priority="100">
+                <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </activity>
+
+        <!-- The module's notices (hg_notify in module/template/common/functions.sh), posted as
+             this app: HyperOS hides com.android.shell's. Explicit broadcasts only (no intent
+             filter), and only from senders holding DUMP (signature|privileged|development): root
+             passes every permission check, the shell uid holds it, ordinary apps can't.
+             Direct-boot aware (as TouchInteractionService already is, so the process runs before
+             the first unlock anyway): a rollback or firmware notice before the first unlock is
+             still posted as this app instead of falling back to Shell's hidden one. It touches no
+             credential-encrypted storage. -->
+        <receiver
+            android:name="com.hypergestures.HgNotifyReceiver"
+            android:directBootAware="true"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
+        <!-- "Hide gesture line" works whatever HOME is: once a boot, HgBootReceiver syncs the
+             overlay with its setting, also on a dormant boot (MiuiHome as HOME), where SystemUI
+             never binds TouchInteractionService (whose start syncs it otherwise). Not exported:
+             the system's BOOT_COMPLETED still arrives (RECEIVE_BOOT_COMPLETED comes from
+             Launcher3's manifest). -->
+        <receiver
+            android:name="com.hypergestures.HgBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
