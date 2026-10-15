@@ -7,8 +7,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+# contents: write only so a tag build can publish its release (the step is skipped otherwise).
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-${{ github.ref }}
@@ -18,8 +19,6 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
 
@@ -94,37 +93,27 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
 
-      - uses: actions/upload-artifact@v4
+      # One plain .zip (the KernelSU module), not a zip of the zip.
+      - uses: actions/upload-artifact@v7
         with:
-          name: HyperGestures-${{ steps.version.outputs.version }}
           path: out/HyperGestures-${{ steps.version.outputs.version }}.zip
+          archive: false
           if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          flags=()
+          case "$VERSION" in *-alpha*|*-beta*|*-rc*) flags+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" "out/HyperGestures-$VERSION.zip"             --repo "$GITHUB_REPOSITORY" --title "HyperGestures $VERSION"             --generate-notes "${flags[@]}"
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports
           path: "**/build/reports/tests/"
           if-no-files-found: ignore
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: HyperGestures-${{ needs.build.outputs.version }}
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          flags=()
-          case "$VERSION" in *-alpha*|*-beta*|*-rc*) flags+=(--prerelease) ;; esac
-          gh release create "$GITHUB_REF_NAME" "HyperGestures-$VERSION.zip" \
-            --repo "$GITHUB_REPOSITORY" --title "HyperGestures $VERSION" \
-            --generate-notes "${flags[@]}"
