@@ -108,7 +108,9 @@ jobs:
         run: |
           flags=()
           case "$VERSION" in *-alpha*|*-beta*|*-rc*) flags+=(--prerelease) ;; esac
-          gh release create "$GITHUB_REF_NAME" "out/HyperGestures-$VERSION.zip"             --repo "$GITHUB_REPOSITORY" --title "HyperGestures $VERSION"             --generate-notes "${flags[@]}"
+          gh release create "$GITHUB_REF_NAME" "out/HyperGestures-$VERSION.zip" \
+            --repo "$GITHUB_REPOSITORY" --title "HyperGestures $VERSION" \
+            --generate-notes "${flags[@]}"
 
       - name: Upload test reports
         if: failure()
