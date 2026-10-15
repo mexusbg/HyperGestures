@@ -36,9 +36,11 @@ prints a status summary.
 
 ## Requirements
 
-- **Phone:** Xiaomi 17 Ultra (`nezha`) on HyperOS 4.0 (Android 17). Each build is pinned to the
-  firmware it was built against (see `tools/framework-stub/device-build.txt`). On any other
-  firmware the module refuses to set up and leaves the phone stock.
+- **Phone:** Xiaomi 17 Ultra (`nezha`) on HyperOS 4.0 (Android 17). Each build is made for the
+  firmware it was built against (see `tools/framework-stub/device-build.txt`). On another
+  firmware build the module still sets up, posts a notification, and relies on the boot health
+  check: if gestures don't come up, it rolls back to stock. Set `STRICT_FIRMWARE=1` in the
+  module config to refuse other firmware outright.
 - **Root:** KernelSU, with a module mount (a metamodule such as Hybrid Mount works).
 - **Home:** a third-party launcher set as the default home app.
 - **Optional:** LSPosed (libxposed API 102) for the notification icon fix. Enable
@@ -68,8 +70,9 @@ If the screen has no working navigation, use adb: run `restore.sh` as above, or 
 module with `adb shell su -c touch /data/adb/modules/hypergestures/disable` and reboot. KernelSU
 safe mode also boots without the module.
 
-Before a firmware update (OTA), remove the module first. A build for the old firmware won't set
-up on the new one.
+Before a firmware update (OTA), the safest route is to run `restore.sh` and disable the module,
+update, then install a build made for the new firmware. Small OTAs often keep working, but
+Xiaomi may change SystemUI internals the module depends on.
 
 ## How it works
 
