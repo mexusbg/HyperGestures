@@ -278,10 +278,14 @@ object InputConsumerUtils {
             }
 
             val navHandle = tac?.navHandle ?: SystemUiProxy.INSTANCE[context]
+            // HyperGestures: the System launcher's own line settings decide, as MiuiHome does: no
+            // long-press consumer (no hint haptic, no Circle to Search) while hide_gesture_line
+            // hides the line or Secure NavLongPress says "none" (HgNavLine; read per touch-down).
             if (
                 canStartSystemGesture &&
                     !previousGestureState.isRecentsAnimationRunning &&
                     navHandle.canNavHandleBeLongPressed() &&
+                    HgNavLine.longPressStartsSearch(context) &&
                     !ignoreThreeFingerTrackpadForNavHandleLongPress(gestureState)
             ) {
                 reasonString.append(

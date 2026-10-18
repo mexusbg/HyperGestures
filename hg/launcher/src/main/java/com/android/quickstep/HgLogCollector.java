@@ -120,12 +120,15 @@ public final class HgLogCollector {
             HgHealthFacts.PROVIDER_BOUND, HgHealthFacts.GESTURE_MONITOR,
             HgRecentsSettings.HEALTH_FACTS, HgRecentsSettings.SETTINGS_MIGRATION,
     };
-    static final String[] SYSTEM_GLOBAL_KEYS = {HgRecentsLayout.MIUI_STYLE, "force_fsg_nav_bar"};
+    static final String[] SYSTEM_GLOBAL_KEYS = {HgRecentsLayout.MIUI_STYLE, "force_fsg_nav_bar",
+            HgNavLine.HIDE_LINE};
     static final String[] SECURE_KEYS = {"navigation_mode", HgBlurSupport.MIUI_ENABLE,
-            "back_gesture_inset_scale_left", "back_gesture_inset_scale_right"};
+            "back_gesture_inset_scale_left", "back_gesture_inset_scale_right",
+            HgNavLine.LONG_PRESS, "search_all_entrypoints_enabled"};
     /** The haptic keys show which one HyperOS's toggle flips (interaction/HgBackHaptics). */
     static final String[] SYSTEM_KEYS = {HgRamIndicator.SHOW_MEM_INFO, "haptic_feedback_disable",
-            "haptic_feedback_enabled", "haptic_feedback_level", "haptic_feedback_intensity"};
+            "haptic_feedback_enabled", "haptic_feedback_level", "haptic_feedback_intensity",
+            HgNavLine.OLD_CTS_SWITCH};
 
     /** The zip's file name for a save at {@code nowMs}. */
     static String zipName(long nowMs) {

@@ -4,13 +4,15 @@
 // then applied through HgHideGestureLine) and hypergestures_notification_icons ("1" on; read by
 // our LSPosed hooks in SystemUI and the AOD: their own APK, com.hypergestures.notif, which shares
 // only NotifKeys with us), HyperOS's Settings.System
-// miui_recents_show_mem_info and AOSP's Settings.Secure back_gesture_inset_scale_left/right.
+// miui_recents_show_mem_info, AOSP's Settings.Secure back_gesture_inset_scale_left/right and the
+// System launcher's own Global hide_gesture_line and Secure NavLongPress (HgNavLine).
 // Nothing is stored in the app, so adb and the page always agree; the values are read again
 // whenever the page resumes. Writes need WRITE_SECURE_SETTINGS (Global, Secure) and
 // WRITE_SETTINGS (System), both granted; a failed write leaves the switch as it was and toasts.
 // Plus Save logs (HgLogCollector), versions, the module's status, the author, the license (CC
 // BY-NC-SA 4.0, a tap opens its deed) and a Ko-fi link (the browser; a toast without one). Sections: Recents and Gestures (ours, only while they
-// run), System (works with any home app: "Hide gesture line",
+// run), System (works with any home app: "Hide navigation line", the System launcher's; while
+// it is off "Long press navigation line" and "Hide navigation line (alternative)", our overlay;
 // "Fix notification icons", "Fix App info back": HgAppInfoTrampoline's component follows it),
 // Logs and About. Whether ours run is this boot's state as the module
 // publishes it (HgModuleStatus), read with the HOME holder whenever the page resumes, its opening
@@ -76,6 +78,9 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
     private final Preference[] mSections = new Preference[HgSettingsSections.ABOUT + 1];
     /** About's "Module status" line, read again on each resume. */
     private Preference mModuleStatus;
+    /** Shown only while the System launcher's line is visible (HgNavLine.dependentsShown). */
+    private Preference mLongPress;
+    private Preference mAltHide;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -129,7 +134,9 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         // Works with any home app, so it stays while HyperOS's gestures and recents run.
         PreferenceGroup system = category(screen, R.string.hg_settings_system);
         mSections[HgSettingsSections.SYSTEM] = system;
-        addHideLine(system);
+        addNavLineHide(system);
+        mLongPress = addNavLongPress(system);
+        mAltHide = addHideLine(system);
         addNotificationIcons(system);
         addAppInfoFix(system);
 
@@ -368,7 +375,7 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
      * so). Under the summary, the overlay's state (HgHideGestureLine.status), read on the same
      * helper thread after any sync queued before it.
      */
-    private void addHideLine(PreferenceGroup group) {
+    private Preference addHideLine(PreferenceGroup group) {
         Context app = group.getContext().getApplicationContext();
         ContentResolver cr = app.getContentResolver();
         String key = HgRecentsSettings.HIDE_GESTURE_LINE;
@@ -395,9 +402,84 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
                                 : summary + "\n" + getString(line));
                     });
                 }));
+        return self[0];
     }
 
-    /** The line under "Hide gesture line" for a HgHideGestureLine status; 0 for none. */
+    /**
+     * "Hide navigation line": the System launcher's own setting, Settings.Global
+     * hide_gesture_line, written as MiuiHome writes it (putInt 1 or 0, nothing else; HgNavLine).
+     * While it hides the line, the long press choice and our alternative are hidden: HyperOS
+     * starts no Circle to Search on a hidden line, and our gesture service follows it. The
+     * alternative keeps its value and its overlay meanwhile (no binder work on a toggle; the line
+     * is hidden either way), so turning this off returns to what the alternative says.
+     */
+    private void addNavLineHide(PreferenceGroup group) {
+        ContentResolver cr = group.getContext().getContentResolver();
+        addSwitch(group, R.string.hg_settings_nav_line_hide,
+                R.string.hg_settings_nav_line_hide_summary,
+                () -> HgNavLine.hiddenNow(cr),
+                on -> Settings.Global.putInt(cr, HgNavLine.HIDE_LINE, on ? 1 : 0),
+                on -> {
+                    boolean shown = HgNavLine.dependentsShown(on);
+                    if (mLongPress != null) mLongPress.setVisible(shown);
+                    if (mAltHide != null) mAltHide.setVisible(shown);
+                });
+    }
+
+    /**
+     * "Long press navigation line": Circle to Search or nothing, kept in the System launcher's own
+     * Settings.Secure NavLongPress ("launch_google_search" or "none", written as MiuiHome's
+     * NavShortcutConfigManager.writeSetting does), so its page and ours are one setting. Our
+     * gesture service reads it at each touch-down (HgNavLine.longPressStartsSearch). An action
+     * another app registered with MiuiHome selects neither choice; the summary says so.
+     */
+    private Preference addNavLongPress(PreferenceGroup group) {
+        Context ctx = group.getContext();
+        ContentResolver cr = ctx.getContentResolver();
+        ListPreference p = new ListPreference(ctx);
+        // Its dialog fragment finds the preference by key; not persisted (Settings.Secure).
+        p.setKey("hg_nav_long_press");
+        p.setPersistent(false);
+        p.setTitle(R.string.hg_settings_nav_long_press);
+        p.setDialogTitle(R.string.hg_settings_nav_long_press);
+        p.setIconSpaceReserved(false);
+        p.setEntries(new CharSequence[] {getString(R.string.hg_settings_nav_long_press_cts),
+                getString(R.string.hg_settings_nav_long_press_none)});
+        p.setEntryValues(new CharSequence[] {"cts", "none"});
+        p.setOnPreferenceChangeListener((pref, value) -> {
+            String choice = (String) value;
+            if (!write(() -> Settings.Secure.putString(cr, HgNavLine.LONG_PRESS,
+                    HgNavLine.valueForChoice(choice)))) {
+                return false;
+            }
+            p.setSummary(longPressSummary(choice));
+            return true;
+        });
+        group.addPreference(p);
+        mRefreshers.add(() -> {
+            String choice;
+            try {
+                choice = HgNavLine.choice(HgNavLine.actionNow(cr));
+            } catch (RuntimeException e) {
+                Log.w(TAG, "long press setting unreadable: " + e);
+                choice = null;
+            }
+            p.setValue(choice);
+            p.setSummary(longPressSummary(choice));
+        });
+        return p;
+    }
+
+    private String longPressSummary(String choice) {
+        if ("cts".equals(choice)) return getString(R.string.hg_settings_nav_long_press_cts);
+        if ("none".equals(choice)) return getString(R.string.hg_settings_nav_long_press_none);
+        return getString(R.string.hg_settings_nav_long_press_other);
+    }
+
+    /**
+     * The line under "Hide navigation line (alternative)" for a HgHideGestureLine status; 0 for
+     * none.
+     */
     private static int hideLineStatusText(int status) {
         switch (status) {
             case HgHideGestureLine.STATUS_HIDDEN:

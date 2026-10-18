@@ -1,12 +1,13 @@
-// HyperGestures: "Hide gesture line" (Settings.Global hypergestures_hide_gesture_line; unlike our
-// other switches it is OFF unless "1"). SystemUI paints the gestural navigation handle with
-// color/navigation_bar_home_handle_light_color and _dark_color, and sizes it (and the regions its
-// touches are tested against) from dimen/navigation_handle_radius. A fabricated runtime resource
-// overlay owned by this app sets both colours to fully transparent: the handle keeps the size and
-// touch regions the system computed, so swipes and the long press that starts Circle to Search
-// still work, but nothing is drawn. The radius is left alone on purpose (zero hides the line too,
-// but it also feeds hit testing, and a zero handle stops that long press), and nothing here
-// touches MiuiHome's NavStubView gesture area.
+// HyperGestures: "Hide navigation line (alternative)" (Settings.Global
+// hypergestures_hide_gesture_line; unlike our other switches it is OFF unless "1"; the page shows
+// it only while the System launcher's own hide, HgNavLine, is off). SystemUI paints the gestural
+// navigation handle with color/navigation_bar_home_handle_light_color and _dark_color, and sizes
+// it (and the regions its touches are tested against) from dimen/navigation_handle_radius. A
+// fabricated runtime resource overlay owned by this app sets both colours to fully transparent:
+// the handle keeps the size and touch regions the system computed, so swipes and the long press
+// that starts Circle to Search still work, but nothing is drawn. The radius is left alone on
+// purpose (zero hides the line too, but it also feeds hit testing, and a zero handle stops that
+// long press), and nothing here touches MiuiHome's NavStubView gesture area.
 //
 // Why the app may do this (AOSP 17 OverlayManagerService and OverlayActorEnforcer):
 // - registering or unregistering a fabricated overlay only needs the calling uid to own the

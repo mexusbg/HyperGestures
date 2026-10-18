@@ -17,7 +17,7 @@ final class HgSettingsSections {
     static final int NOTE = 0;
     static final int RECENTS = 1;
     static final int GESTURES = 2;
-    /** Works with any home app ("Hide gesture line", "Fix notification icons"). */
+    /** Works with any home app ("Hide navigation line", "Fix notification icons"). */
     static final int SYSTEM = 3;
     static final int LOGS = 4;
     static final int ABOUT = 5;
