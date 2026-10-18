@@ -48,11 +48,23 @@ prints a status summary.
 
 ## Install
 
-1. Download `HyperGestures-<version>.zip` from [Releases](../../releases).
-2. Install it in KernelSU and **reboot fully** (not a soft reboot).
-3. Set your launcher as the default home app.
+1. In HyperOS, keep the gesture line visible in the System launcher's settings. If it is hidden
+   there, Circle to Search stops working. To hide the line, use HyperGestures' own "Hide gesture
+   line" setting instead.
+2. Set your launcher as the default home app.
+3. Download `HyperGestures-<version>.zip` from [Releases](../../releases), install it in KernelSU
+   and **reboot fully** (not a soft reboot).
 
 Updating works the same way: install the new zip over the old one, then reboot.
+
+## Switching home apps
+
+- **From the System launcher (MiuiHome) to another launcher:** reboot after the switch. While
+  MiuiHome is home, the module stays dormant and only turns on at the next boot.
+- **Between third-party launchers:** once the module is active, switch any time, no reboot
+  needed.
+- **Back to the System launcher:** the app tells you to reboot. After the reboot the module is
+  dormant and HyperOS runs its own gestures.
 
 ## Safety and recovery
 
