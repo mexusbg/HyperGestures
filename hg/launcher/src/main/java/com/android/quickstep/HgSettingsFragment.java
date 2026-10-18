@@ -410,15 +410,21 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
      * hide_gesture_line, written as MiuiHome writes it (putInt 1 or 0, nothing else; HgNavLine).
      * While it hides the line, the long press choice and our alternative are hidden: HyperOS
      * starts no Circle to Search on a hidden line, and our gesture service follows it. The
-     * alternative keeps its value and its overlay meanwhile (no binder work on a toggle; the line
-     * is hidden either way), so turning this off returns to what the alternative says.
+     * alternative keeps its value meanwhile, so turning this off returns to what the alternative
+     * says. With our gestures SystemUI ignores hide_gesture_line (it applies it only in HyperOS's
+     * own gesture mode, which we never turn on), so our overlay hides the line too
+     * (HgHideGestureLine.wanted); that shows after a reboot.
      */
     private void addNavLineHide(PreferenceGroup group) {
         ContentResolver cr = group.getContext().getContentResolver();
         addSwitch(group, R.string.hg_settings_nav_line_hide,
                 R.string.hg_settings_nav_line_hide_summary,
                 () -> HgNavLine.hiddenNow(cr),
-                on -> Settings.Global.putInt(cr, HgNavLine.HIDE_LINE, on ? 1 : 0),
+                on -> {
+                    boolean ok = Settings.Global.putInt(cr, HgNavLine.HIDE_LINE, on ? 1 : 0);
+                    HgHideGestureLine.syncLater(group.getContext());
+                    return ok;
+                },
                 on -> {
                     boolean shown = HgNavLine.dependentsShown(on);
                     if (mLongPress != null) mLongPress.setVisible(shown);

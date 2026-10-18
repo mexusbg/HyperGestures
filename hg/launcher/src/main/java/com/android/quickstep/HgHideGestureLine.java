@@ -1,6 +1,11 @@
 // HyperGestures: "Hide navigation line (alternative)" (Settings.Global
 // hypergestures_hide_gesture_line; unlike our other switches it is OFF unless "1"; the page shows
-// it only while the System launcher's own hide, HgNavLine, is off). SystemUI paints the gestural
+// it only while the System launcher's own hide, HgNavLine, is off). The same overlay also carries
+// the main "Hide navigation line" (hide_gesture_line) while our gesture service runs: HyperOS
+// SystemUI applies that key only in its own full-screen gesture mode (force_fsg_nav_bar=1, where
+// it removes its navigation bar), and that mode runs HyperOS's gesture handlers next to ours
+// (owner's phone, 2026-10-19: glitches, Circle to Search during app switches, one-way quick
+// switch), so we never turn it on; with a third-party HOME HyperOS keeps it off. See wanted(). SystemUI paints the gestural
 // navigation handle with color/navigation_bar_home_handle_light_color and _dark_color, and sizes
 // it (and the regions its touches are tested against) from dimen/navigation_handle_radius. A
 // fabricated runtime resource overlay owned by this app sets both colours to fully transparent:
@@ -98,6 +103,29 @@ public final class HgHideGestureLine {
     }
 
     /**
+     * Whether the overlay should hide the line: our alternative ({@code alternative}, our key),
+     * or the System launcher's own hide ({@code main}, hide_gesture_line, read as MiuiHome reads
+     * it) on a boot where our gestures run ({@code ourGestures}). On other boots (MiuiHome as
+     * HOME, rolled back, status unknown) HyperOS applies hide_gesture_line itself, live, and a
+     * leftover overlay would keep the line invisible after an un-hide there until a reboot.
+     */
+    static boolean wanted(String alternative, String main, boolean ourGestures) {
+        return isOn(alternative) || (ourGestures && HgNavLine.isHidden(main));
+    }
+
+    /** Whether this boot's module status says our gestures run (post-fs-data chose active). */
+    static boolean ourGestures(HgModuleStatus status) {
+        return status != null && HgModuleStatus.ACTIVE.equals(status.boot) && !status.off();
+    }
+
+    private static boolean wantedNow(Context context) {
+        android.content.ContentResolver cr = context.getContentResolver();
+        return wanted(Settings.Global.getString(cr, HgRecentsSettings.HIDE_GESTURE_LINE),
+                Settings.Global.getString(cr, HgNavLine.HIDE_LINE),
+                ourGestures(HgModuleStatus.read(context)));
+    }
+
+    /**
      * What to do for the wanted state, given whether our overlay is registered and enabled for
      * this user. Off removes a registered overlay even if it is disabled, so none is left behind.
      */
@@ -128,8 +156,7 @@ public final class HgHideGestureLine {
      */
     static int status(Context context) {
         try {
-            boolean wanted = isOn(Settings.Global.getString(context.getContentResolver(),
-                    HgRecentsSettings.HIDE_GESTURE_LINE));
+            boolean wanted = wantedNow(context);
             OverlayManager om = context.getSystemService(OverlayManager.class);
             if (om == null) return STATUS_NONE;
             OverlayInfo info = om.getOverlayInfo(
@@ -217,8 +244,7 @@ public final class HgHideGestureLine {
     public static boolean sync(Context context) {
         boolean wanted;
         try {
-            wanted = isOn(Settings.Global.getString(context.getContentResolver(),
-                    HgRecentsSettings.HIDE_GESTURE_LINE));
+            wanted = wantedNow(context);
         } catch (RuntimeException e) {
             Log.w(TAG, "setting unreadable", e);
             return false;

@@ -11,6 +11,28 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class HgHideGestureLineTest {
+
+    @Test public void mainHideDrivesTheOverlayOnlyWhileOurGesturesRun() {
+        assertTrue(HgHideGestureLine.wanted("0", "1", true));
+        assertFalse(HgHideGestureLine.wanted("0", "1", false));
+        assertFalse(HgHideGestureLine.wanted(null, "0", true));
+        assertFalse(HgHideGestureLine.wanted(null, null, true));
+        // the alternative hides on every boot
+        assertTrue(HgHideGestureLine.wanted("1", "0", false));
+        assertTrue(HgHideGestureLine.wanted("1", null, true));
+    }
+
+    @Test public void ourGesturesOnlyOnAnActiveBoot() {
+        assertFalse(HgHideGestureLine.ourGestures(null));
+        assertTrue(HgHideGestureLine.ourGestures(
+                HgModuleStatus.forBoot("bootId=b;state=active;boot=active", "b")));
+        assertTrue(HgHideGestureLine.ourGestures(
+                HgModuleStatus.forBoot("bootId=b;state=starting;boot=active", "b")));
+        assertFalse(HgHideGestureLine.ourGestures(
+                HgModuleStatus.forBoot("bootId=b;state=dormant;boot=dormant", "b")));
+        assertFalse(HgHideGestureLine.ourGestures(
+                HgModuleStatus.forBoot("bootId=b;state=rolled-back;boot=active", "b")));
+    }
     /** Opt-in: on only when exactly "1"; unset, "0" and anything else leave the line visible. */
     @Test public void offUnlessOne() {
         assertTrue(HgHideGestureLine.isOn("1"));

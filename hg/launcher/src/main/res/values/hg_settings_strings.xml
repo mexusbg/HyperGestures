@@ -64,8 +64,9 @@
     <!-- The System launcher's own "Hide navigation line" (Settings.Global hide_gesture_line,
          HgNavLine): one setting with it. HyperOS starts no Circle to Search on a hidden line -->
     <string name="hg_settings_nav_line_hide">Hide navigation line</string>
-    <string name="hg_settings_nav_line_hide_summary">The System launcher\'s own setting: hides the
-        line as HyperOS does. Circle to Search on a long press is off while it is hidden.</string>
+    <string name="hg_settings_nav_line_hide_summary">The System launcher\'s own setting, as on stock
+        HyperOS: Circle to Search on a long press is off while the line is hidden. With
+        HyperGestures\' gestures it takes effect after a reboot.</string>
     <!-- What a long press on the line does (Settings.Secure NavLongPress, shared with the System
          launcher); shown while the line is not hidden -->
     <string name="hg_settings_nav_long_press">Long press navigation line</string>
