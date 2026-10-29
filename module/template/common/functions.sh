@@ -2789,7 +2789,12 @@ hg_service_main() {
   if [ -n "$_hg_why" ]; then
     if [ "$STRICT_FIRMWARE" != 1 ]; then
       hg_log "$_hg_why; setting up anyway (STRICT_FIRMWARE=0), the health check decides"
-      hg_notify "$(hg_firmware_head "$1") HyperGestures will run a health check and disable itself if anything is wrong."
+      # Once per firmware: the next boots on the same build only log it.
+      _hg_head="$(hg_firmware_head "$1")"
+      if [ "$(cat "$HG_DATA/firmware-notified" 2>/dev/null)" != "$_hg_head" ]; then
+        hg_notify "$_hg_head HyperGestures will run a health check and disable itself if anything is wrong."
+        echo "$_hg_head" > "$HG_DATA/firmware-notified"
+      fi
     elif [ "$IGNORE_FINGERPRINT" != 1 ]; then
       hg_firmware_refuse "$1" "$_hg_why"
       hg_health_status refused "not run: firmware refused (STRICT_FIRMWARE=1)"

@@ -1791,6 +1791,14 @@ if [ ! -e "$T/svc/disable" ] && has "am force-stop" && on "$GESTURAL" && hstatus
    && notified | grep -qF "Firmware changed ($FP → $OTA). HyperGestures will run a health check and disable itself if anything is wrong." \
    && [ "$(notified | grep -c .)" = 1 ] && grep -q "firmware mismatch: built for $FP, this phone runs $OTA; setting up anyway" "$T/data/log.txt"; then
   ok health_firmware_mismatch_by_default_sets_up_with_the_health_check; else bad "health_firmware_mismatch_by_default_sets_up_with_the_health_check ($(hstatus))"; fi
+# The soft check's notice comes once per firmware: the next boots on the same build only log it; a
+# newer build notifies again.
+OTA2='Xiaomi/nezha_eea/nezha:17/CP2A.270101.001/OS4.0.1.1.XPAEUXM:user/release-keys'
+: > "$T/calls"; : > "$T/sleeps"; hg_service_main "$T/svc"; _again="$(notified | grep -c .)"
+: > "$T/calls"; : > "$T/sleeps"; echo "$OTA2" > "$T/fingerprint"; hg_service_main "$T/svc"
+if [ "$_again" = 0 ] && [ "$(notified | grep -c .)" = 1 ] && notified | grep -qF "Firmware changed ($FP → $OTA2)." \
+   && [ "$(grep -c "this phone runs $OTA; setting up anyway" "$T/data/log.txt")" = 2 ] && hstatus | grep -q '^ok'; then
+  ok health_firmware_notice_once_per_firmware; else bad "health_firmware_notice_once_per_firmware (again=$_again; $(hstatus))"; fi
 # service.sh grants our app POST_NOTIFICATIONS once, before its first notice (that one goes through the app).
 hsetup; echo "$OTA" > "$T/fingerprint"; am_says "Broadcast completed: result=1"; hg_service_main "$T/svc"
 if [ "$(grep -c "^pm grant com.hypergestures android.permission.POST_NOTIFICATIONS$" "$T/calls")" = 1 ] \
