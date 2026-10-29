@@ -1952,7 +1952,9 @@ public abstract class AbsSwipeUpHandler<
                     && runningTaskTarget.allowEnterPip
                     && runningTaskTarget.taskInfo.pictureInPictureParams != null
                     && runningTaskTarget.taskInfo.pictureInPictureParams.isAutoEnterEnabled()
-                    && !swipeUpInDesktopWindowing;
+                    && !swipeUpInDesktopWindowing
+                    // HyperGestures: not with a third-party home (hgSwipesPipToHome).
+                    && hgSwipesPipToHome();
 
             HomeAnimationFactory homeAnimFactory = createHomeAnimationFactory(
                     cookies,
@@ -2741,6 +2743,15 @@ public abstract class AbsSwipeUpHandler<
     }
 
     protected abstract void finishRecentsControllerToHome(Runnable callback);
+
+    /**
+     * HyperGestures: whether a home gesture from an auto-enter-PiP app morphs the app into its
+     * PiP window (SwipePipToHomeAnimator); otherwise it goes home like any app and the system
+     * enters PiP on its own (fading in, setPipAnimationTypeToAlpha).
+     */
+    protected boolean hgSwipesPipToHome() {
+        return true;
+    }
 
     private void setupLauncherUiAfterSwipeUpToRecentsAnimation() {
         if (mStateCallback.hasStates(STATE_HANDLER_INVALIDATED) || mRecentsView == null) {

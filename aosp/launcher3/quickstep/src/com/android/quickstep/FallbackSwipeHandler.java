@@ -599,6 +599,19 @@ public class FallbackSwipeHandler extends
         super.onTasksAppeared(appearedTaskTargets, transitionInfo);
     }
 
+    /**
+     * HyperGestures: never with a third-party home, as on stock HyperOS (MiuiHome closes the app
+     * as usual and only asks for the fade-in). Here the morph commits the PiP before the home app
+     * is started (finishRecentsControllerToHome), so for that moment the app's own task is the
+     * top one: on HyperOS the activity left in it resumes, and Facebook then finishes its PiP
+     * video; SystemUI's PipTransition finds no PiP change and removes both tasks, so the app
+     * was gone from recents.
+     */
+    @Override
+    protected boolean hgSwipesPipToHome() {
+        return false;
+    }
+
     @Override
     protected void finishRecentsControllerToHome(Runnable callback) {
         final Runnable recentsCallback;
