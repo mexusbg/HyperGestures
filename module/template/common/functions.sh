@@ -1181,6 +1181,11 @@ hg_grant_notifications() {
 # tools/framework-stub/device-build.txt), and the one this phone runs.
 hg_expected_fingerprint() { tr -d '\r\n' 2>/dev/null < "$1/expected-fingerprint"; }
 hg_phone_fingerprint() { $HG_CMD_GETPROP ro.build.fingerprint 2>/dev/null; }
+# The phone's HyperOS version as Settings shows it (OS4.0.0.13: the fingerprint's incremental
+# without its region code), or the whole fingerprint if it has another shape.
+hg_phone_os_version() {
+  hg_phone_fingerprint | sed 's|^[^/]*/[^/]*/[^/]*/[^/]*/\([^:/]*\):.*|\1|; s|^\(OS[0-9.]*[0-9]\)\.[A-Z][A-Z0-9]*$|\1|'
+}
 
 # Why this phone's build is not the one the module was made for; prints nothing if it is ($1 =
 # module dir). The APK's hidden-API calls, inlined device resource values and AIDL transaction
@@ -2792,7 +2797,7 @@ hg_service_main() {
       # Once per firmware: the next boots on the same build only log it.
       _hg_head="$(hg_firmware_head "$1")"
       if [ "$(cat "$HG_DATA/firmware-notified" 2>/dev/null)" != "$_hg_head" ]; then
-        hg_notify "$_hg_head HyperGestures will run a health check and disable itself if anything is wrong."
+        hg_notify "New HyperOS version ($(hg_phone_os_version)): HyperGestures is checking compatibility and turns itself off if anything is wrong."
         echo "$_hg_head" > "$HG_DATA/firmware-notified"
       fi
     elif [ "$IGNORE_FINGERPRINT" != 1 ]; then

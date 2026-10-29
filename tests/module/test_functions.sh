@@ -1788,7 +1788,7 @@ if rolled_back "$T/svc" && notified | grep -qF "${HEALTH_FAIL}com.android.system
   ok health_fallback_counts_dumpsys_when_the_dropbox_cannot_be_listed; else bad "health_fallback_counts_dumpsys_when_the_dropbox_cannot_be_listed ($(hstatus))"; fi
 hsetup; echo "$OTA" > "$T/fingerprint"; hg_service_main "$T/svc"
 if [ ! -e "$T/svc/disable" ] && has "am force-stop" && on "$GESTURAL" && hstatus | grep -q '^ok' && [ "$(sleeps)" = "$H3" ] \
-   && notified | grep -qF "Firmware changed ($FP → $OTA). HyperGestures will run a health check and disable itself if anything is wrong." \
+   && notified | grep -qF "New HyperOS version (OS4.0.1.0): HyperGestures is checking compatibility and turns itself off if anything is wrong." \
    && [ "$(notified | grep -c .)" = 1 ] && grep -q "firmware mismatch: built for $FP, this phone runs $OTA; setting up anyway" "$T/data/log.txt"; then
   ok health_firmware_mismatch_by_default_sets_up_with_the_health_check; else bad "health_firmware_mismatch_by_default_sets_up_with_the_health_check ($(hstatus))"; fi
 # The soft check's notice comes once per firmware: the next boots on the same build only log it; a
@@ -1796,13 +1796,13 @@ if [ ! -e "$T/svc/disable" ] && has "am force-stop" && on "$GESTURAL" && hstatus
 OTA2='Xiaomi/nezha_eea/nezha:17/CP2A.270101.001/OS4.0.1.1.XPAEUXM:user/release-keys'
 : > "$T/calls"; : > "$T/sleeps"; hg_service_main "$T/svc"; _again="$(notified | grep -c .)"
 : > "$T/calls"; : > "$T/sleeps"; echo "$OTA2" > "$T/fingerprint"; hg_service_main "$T/svc"
-if [ "$_again" = 0 ] && [ "$(notified | grep -c .)" = 1 ] && notified | grep -qF "Firmware changed ($FP → $OTA2)." \
+if [ "$_again" = 0 ] && [ "$(notified | grep -c .)" = 1 ] && notified | grep -qF "New HyperOS version (OS4.0.1.1):" \
    && [ "$(grep -c "this phone runs $OTA; setting up anyway" "$T/data/log.txt")" = 2 ] && hstatus | grep -q '^ok'; then
   ok health_firmware_notice_once_per_firmware; else bad "health_firmware_notice_once_per_firmware (again=$_again; $(hstatus))"; fi
 # service.sh grants our app POST_NOTIFICATIONS once, before its first notice (that one goes through the app).
 hsetup; echo "$OTA" > "$T/fingerprint"; am_says "Broadcast completed: result=1"; hg_service_main "$T/svc"
 if [ "$(grep -c "^pm grant com.hypergestures android.permission.POST_NOTIFICATIONS$" "$T/calls")" = 1 ] \
-   && before "^pm grant com.hypergestures" "^$AM_NOTIFY Firmware changed" && ! notified && hstatus | grep -q '^ok'; then
+   && before "^pm grant com.hypergestures" "^$AM_NOTIFY New HyperOS version" && ! notified && hstatus | grep -q '^ok'; then
   ok service_grants_notifications_before_its_first_notice; else bad "service_grants_notifications_before_its_first_notice ($(hstatus))"; fi
 hsetup; echo "$OTA" > "$T/fingerprint"; crash_at 1 "$SUI"; hg_service_main "$T/svc"
 if [ -f "$T/svc/disable" ] && has "$HOME_BACK" && on "$THREEBUTTON" && [ "$(notified | grep -c .)" = 2 ] && notified | grep -qF "$HEALTH_FAIL"; then
