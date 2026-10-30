@@ -228,7 +228,8 @@ public class HgTaskLockSwipeController<T extends Context & RecentsViewContainer>
         boolean toggle = mArmed;
         if (toggle) {
             HgTaskLocking.setLocked(mContainer, taskView, mTargetLocked);
-            taskView.performHapticFeedback(HapticFeedbackConstants.CONFIRM);
+            // MiuiHome's lock / unlock effect, else the CONFIRM tick (HgRecentsHaptics).
+            HgRecentsHaptics.playLock(taskView, mTargetLocked);
             Log.i(TAG, (mTargetLocked ? "locked" : "unlocked") + " by swipe down");
         }
         AnimatorSet set = new AnimatorSet();

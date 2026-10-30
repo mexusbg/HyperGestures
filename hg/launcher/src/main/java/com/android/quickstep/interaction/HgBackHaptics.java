@@ -27,7 +27,7 @@ import com.android.launcher3.util.VibratorWrapper;
 import java.lang.reflect.Method;
 import java.util.function.IntPredicate;
 
-final class HgBackHaptics {
+public final class HgBackHaptics {
     private static final String TAG = "HgBackHaptics";
     private static final String UTIL_CLASS = "miui.util.HapticFeedbackUtil";
 
@@ -49,8 +49,8 @@ final class HgBackHaptics {
     private static int[] sIds = {-1, -1};
 
     /** Settings.System keys of the haptic feedback setting: HyperOS's, then AOSP's. */
-    static final String KEY_DISABLE = "haptic_feedback_disable";
-    static final String KEY_ENABLED = Settings.System.HAPTIC_FEEDBACK_ENABLED;
+    public static final String KEY_DISABLE = "haptic_feedback_disable";
+    public static final String KEY_ENABLED = Settings.System.HAPTIC_FEEDBACK_ENABLED;
 
     private final Context mContext;
     private final HgBackHapticTimer mTimer = new HgBackHapticTimer();
@@ -60,6 +60,7 @@ final class HgBackHaptics {
      */
     private volatile boolean mFeedbackOn = true;
 
+    /** HgRecentsHaptics reads the same switch (touchFeedbackOn, KEY_*). */
     HgBackHaptics(Context context) {
         mContext = context;
         // Resolve ahead so the first tick of the first gesture is not late.
@@ -126,7 +127,8 @@ final class HgBackHaptics {
      * decides when it holds an integer: on only when it is 0. Otherwise AOSP's: on unless it is
      * 0; unset or not an integer counts as on (AOSP's default).
      */
-    static boolean touchFeedbackOn(String hapticFeedbackDisable, String hapticFeedbackEnabled) {
+    public static boolean touchFeedbackOn(String hapticFeedbackDisable,
+            String hapticFeedbackEnabled) {
         Integer disable = parseInt(hapticFeedbackDisable);
         if (disable != null) return disable == 0;
         Integer enabled = parseInt(hapticFeedbackEnabled);

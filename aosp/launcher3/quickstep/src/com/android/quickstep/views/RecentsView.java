@@ -4117,6 +4117,8 @@ public abstract class RecentsView<
             }
         }
         if (OverviewClearAllPolicy.canClearAll(getTaskViewCount(), anyBeingDismissed)) {
+            // HyperGestures: MiuiHome's Clear all haptic (ext effect 213 on haptic v2).
+            com.android.quickstep.HgRecentsHaptics.playClearAll(getContext());
             dismissAllTasks(view);
         }
     }

@@ -13,7 +13,9 @@
 //
 // The line lives in the recents drag layer (bottom centre, under the trash button) and fades with
 // the recents action row (OverviewActionsView's alpha, copied on each frame the row draws), so it
-// shows with the trash button and nowhere else. It reads the memory each time it fades in.
+// shows with the trash button and nowhere else. It reads the memory each time it fades in, and
+// again once a dismissed card's app has been killed (memoryChanged; MiuiHome's
+// refreshMemoryInfo after a kill), so it does not keep showing the memory from before.
 package com.android.quickstep;
 
 import android.app.ActivityManager;
@@ -36,6 +38,8 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
+
+import java.lang.ref.WeakReference;
 
 import com.android.launcher3.R;
 import com.android.launcher3.views.BaseDragLayer;
@@ -63,6 +67,8 @@ public final class HgRamIndicator {
             sync();
         }
     };
+    /** The indicator of the recents window attached last (main thread). */
+    private static WeakReference<HgRamIndicator> sAttached = new WeakReference<>(null);
     @Nullable private TextView mLine;
     private boolean mToggledThisPress;
     /** SHOW_MEM_INFO, read on attach and on each change (sync runs every recents frame). */
@@ -87,6 +93,7 @@ public final class HgRamIndicator {
 
             @Override
             public void onViewAttachedToWindow(View v) {
+                sAttached = new WeakReference<>(indicator);
                 indicator.observe(true);
                 indicator.addLine();
                 v.getViewTreeObserver().addOnPreDrawListener(mSync);
@@ -256,6 +263,17 @@ public final class HgRamIndicator {
         if (alpha > 0f && mLastAlpha == 0f) refresh();
         mLastAlpha = alpha;
         if (line.getAlpha() != alpha) line.setAlpha(alpha);
+    }
+
+    /**
+     * Memory was freed (a dismissed card's app killed), or will be in {@code delayMs}: reads the
+     * memory again then, if the line is there. Any thread.
+     */
+    public static void memoryChanged(long delayMs) {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            HgRamIndicator indicator = sAttached.get();
+            if (indicator != null) indicator.refresh();
+        }, delayMs);
     }
 
     private void refresh() {

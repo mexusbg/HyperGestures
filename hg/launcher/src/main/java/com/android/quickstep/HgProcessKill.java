@@ -80,6 +80,8 @@ public final class HgProcessKill {
      * dropped to background importance first, or killBackgroundProcesses leaves it alone.
      */
     static final long KILL_DELAY_MS = 500;
+    /** After a kill, until the system counts its memory as free again. */
+    static final long RAM_SETTLE_MS = 400;
     /** The failure kinds already logged (each once per process). */
     private static final Set<String> sLogged = new HashSet<>();
 
@@ -149,6 +151,8 @@ public final class HgProcessKill {
             killBackground(context, dismissKillPackages(removedPackages, otherCardPackages,
                     HgHome.packageName(context), own), "dismiss");
         }
+        // The memory line shows what the kill freed (it runs KILL_DELAY_MS later at most).
+        HgRamIndicator.memoryChanged(KILL_DELAY_MS + RAM_SETTLE_MS);
     }
 
     /**
