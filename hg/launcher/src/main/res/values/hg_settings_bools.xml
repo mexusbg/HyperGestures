@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: dark system bar icons over the settings page's light background. -->
+<resources>
+    <bool name="hg_settings_light_bars">true</bool>
+</resources>

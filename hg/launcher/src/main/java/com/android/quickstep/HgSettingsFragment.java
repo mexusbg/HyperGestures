@@ -20,32 +20,48 @@
 // hide Recents and Gestures behind a note, and a HOME changed since the boot adds "reboot"
 // (HgSettingsSections). HOME is HgHome's, as everywhere in the app (the HOME role holder; the
 // chooser and a setup wizard are none); without a status for this boot it alone decides.
+// Looks: a status card at the top (running, standing by or not running, with the note), then each
+// section's rows on one rounded card under a quiet header (HgSettingsCards; the rows' layouts and
+// switches are HgPreferenceTheme's), lists marked by a chevron and web links by an open mark.
 package com.android.quickstep;
 
 import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.annotation.SuppressLint;
 import android.content.pm.PackageInfo;
+import android.content.res.ColorStateList;
+import android.content.res.Resources;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.preference.CheckBoxPreference;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceGroup;
+import androidx.preference.PreferenceGroupAdapter;
 import androidx.preference.PreferenceScreen;
+import androidx.preference.PreferenceViewHolder;
 import androidx.preference.SeekBarPreference;
 import androidx.preference.SwitchPreferenceCompat;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.launcher3.R;
 import com.android.launcher3.util.Executors;
 import com.android.quickstep.interaction.HgBackPolicy;
+import com.google.android.material.color.MaterialColors;
 import com.hypergestures.notif.NotifKeys;
 
 import java.lang.ref.WeakReference;
@@ -76,6 +92,8 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
     private CheckBoxPreference mFilter;
     /** The page's parts, by HgSettingsSections' ids, shown or hidden for this boot's state. */
     private final Preference[] mSections = new Preference[HgSettingsSections.ABOUT + 1];
+    /** The status card's kind (HgSettingsSections.STATUS_*), its background's. */
+    private int mStatusKind = HgSettingsSections.STATUS_ON;
     /** About's "Module status" line, read again on each resume. */
     private Preference mModuleStatus;
     /** Shown only while the System launcher's line is visible (HgNavLine.dependentsShown). */
@@ -96,13 +114,11 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         }
         HgSettingsMigration.run(ctx); // layout copied from HyperOS once; dropped switch keys
 
-        Preference note = new Preference(ctx); // its text follows the mode (updateSections)
-        note.setSummary(R.string.hg_settings_system_home_note);
-        note.setSelectable(false);
-        note.setIconSpaceReserved(false);
-        note.setVisible(false);
-        screen.addPreference(note);
-        mSections[HgSettingsSections.NOTE] = note;
+        Preference status = new Preference(ctx); // follows the mode (updateSections)
+        status.setLayoutResource(R.layout.hg_pref_status);
+        status.setSelectable(false);
+        screen.addPreference(status);
+        mSections[HgSettingsSections.STATUS] = status;
 
         PreferenceGroup recents = category(screen, R.string.hg_settings_recents);
         mSections[HgSettingsSections.RECENTS] = recents;
@@ -182,6 +198,7 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         license.setTitle(R.string.hg_settings_license);
         license.setSummary(R.string.hg_settings_license_name);
         license.setIconSpaceReserved(false);
+        license.setWidgetLayoutResource(R.layout.hg_pref_open);
         license.setOrder(ABOUT_END_ORDER + 1);
         license.setOnPreferenceClickListener(p -> {
             openLink(getString(R.string.hg_settings_license_url));
@@ -192,6 +209,7 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         kofi.setTitle(R.string.hg_settings_kofi);
         kofi.setSummary(R.string.hg_settings_kofi_summary);
         kofi.setIconSpaceReserved(false);
+        kofi.setWidgetLayoutResource(R.layout.hg_pref_open);
         kofi.setOrder(ABOUT_END_ORDER + 2);
         kofi.setOnPreferenceClickListener(p -> {
             openLink(getString(R.string.hg_settings_kofi_url));
@@ -227,6 +245,84 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
     }
 
     @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        setDivider(null); // the cards part the sections
+        RecyclerView list = getListView();
+        list.setClipToPadding(false);
+        list.setPadding(0, 0, 0,
+                getResources().getDimensionPixelSize(R.dimen.hg_settings_list_bottom));
+    }
+
+    /** The list's adapter, drawing the cards behind the rows as it binds them (styleCard). */
+    @SuppressLint("RestrictedApi") // PreferenceGroupAdapter: the only way to a row's preference
+    @NonNull
+    @Override
+    protected RecyclerView.Adapter onCreateAdapter(@NonNull PreferenceScreen screen) {
+        return new PreferenceGroupAdapter(screen) {
+            @Override
+            public void onBindViewHolder(@NonNull PreferenceViewHolder holder, int position) {
+                super.onBindViewHolder(holder, position);
+                styleCard(this, holder, position);
+            }
+        };
+    }
+
+    /**
+     * A row's part of its section's card (HgSettingsCards): the card's colour, rounded where the
+     * card begins or ends, with the touch ripple inside the same shape; the status card gets its
+     * kind's gradient. Headers stay bare. A rebind restores the adapter's own background first,
+     * so this runs on every bind.
+     */
+    @SuppressLint("RestrictedApi")
+    private void styleCard(PreferenceGroupAdapter adapter, PreferenceViewHolder holder,
+            int position) {
+        Preference p = adapter.getItem(position);
+        if (p == null || p instanceof PreferenceCategory) return;
+        View v = holder.itemView;
+        Resources res = v.getResources();
+        int margin = res.getDimensionPixelSize(R.dimen.hg_settings_card_margin);
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+        if (p == mSections[HgSettingsSections.STATUS]) {
+            v.setBackgroundResource(statusBackground(mStatusKind));
+            lp.setMargins(margin, margin / 2, margin, 0);
+            v.setLayoutParams(lp);
+            return;
+        }
+        boolean above = position > 0 && joins(adapter.getItem(position - 1), p);
+        boolean below = position + 1 < adapter.getItemCount()
+                && joins(p, adapter.getItem(position + 1));
+        float[] radii = HgSettingsCards.radii(above, below,
+                res.getDimension(R.dimen.hg_settings_card_radius), 0f);
+        GradientDrawable card = new GradientDrawable();
+        card.setColor(v.getContext().getColor(R.color.hg_settings_card));
+        card.setCornerRadii(radii);
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(0xFFFFFFFF);
+        mask.setCornerRadii(radii);
+        int ripple = MaterialColors.getColor(v, androidx.appcompat.R.attr.colorControlHighlight);
+        v.setBackground(new RippleDrawable(ColorStateList.valueOf(ripple), card, mask));
+        lp.setMargins(margin, 0, margin, 0);
+        v.setLayoutParams(lp);
+    }
+
+    /** Whether {@code row} continues the card of {@code above} (one section's rows). */
+    private boolean joins(Preference above, Preference row) {
+        if (above == null || row == null) return false;
+        return HgSettingsCards.joins(!(above instanceof PreferenceCategory)
+                && above != mSections[HgSettingsSections.STATUS],
+                above.getParent(), row.getParent());
+    }
+
+    private static int statusBackground(int kind) {
+        switch (kind) {
+            case HgSettingsSections.STATUS_ON: return R.drawable.hg_status_on_bg;
+            case HgSettingsSections.STATUS_STANDBY: return R.drawable.hg_status_standby_bg;
+            default: return R.drawable.hg_status_off_bg;
+        }
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
         sShown = new WeakReference<>(this);
@@ -251,16 +347,33 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         for (int i = 0; i < mSections.length; i++) {
             if (mSections[i] != null) mSections[i].setVisible(HgSettingsSections.shows(i, mode));
         }
-        Preference note = mSections[HgSettingsSections.NOTE];
-        if (note != null && mode != HgSettingsSections.MODE_ACTIVE) {
-            note.setSummary(noteText(mode, status));
+        Preference card = mSections[HgSettingsSections.STATUS];
+        if (card != null) {
+            // The kind first: the title's change rebinds the card with its background.
+            mStatusKind = HgSettingsSections.statusKind(mode);
+            switch (mStatusKind) {
+                case HgSettingsSections.STATUS_ON:
+                    card.setIcon(R.drawable.hg_ic_status_on);
+                    card.setTitle(R.string.hg_settings_status_card_on);
+                    break;
+                case HgSettingsSections.STATUS_STANDBY:
+                    card.setIcon(R.drawable.hg_ic_status_standby);
+                    card.setTitle(R.string.hg_settings_status_card_standby);
+                    break;
+                default:
+                    card.setIcon(R.drawable.hg_ic_status_off);
+                    card.setTitle(R.string.hg_settings_status_card_off);
+            }
+            card.setSummary(noteText(mode, status));
         }
         if (mModuleStatus != null) mModuleStatus.setSummary(statusText(status));
     }
 
-    /** The note at the top for {@code mode} (not MODE_ACTIVE). */
+    /** The status card's note for {@code mode}. */
     private String noteText(int mode, HgModuleStatus status) {
         switch (mode) {
+            case HgSettingsSections.MODE_ACTIVE:
+                return getString(R.string.hg_settings_status_card_on_note);
             case HgSettingsSections.MODE_ACTIVE_REBOOT:
                 return getString(R.string.hg_settings_note_reboot_to_stock);
             case HgSettingsSections.MODE_STOCK_REBOOT:

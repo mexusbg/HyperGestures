@@ -9,12 +9,13 @@
 // set now) and while ours are off (the note gives the reason). System (works with any home app),
 // Logs and About always show. Without a status for this boot (an older module, service.sh not
 // there yet) it goes by the live HOME as before: MiuiHome hides them, any other or an unknown
-// HOME shows everything, as the module treats an unknown holder as an active boot.
+// HOME shows everything, as the module treats an unknown holder as an active boot. The note is
+// the status card at the top, always shown: running, standing by or not running (statusKind).
 package com.android.quickstep;
 
 final class HgSettingsSections {
-    /** The note at the top (its text follows the mode). */
-    static final int NOTE = 0;
+    /** The status card at the top (its look and text follow the mode). */
+    static final int STATUS = 0;
     static final int RECENTS = 1;
     static final int GESTURES = 2;
     /** Works with any home app ("Hide navigation line", "Fix notification icons"). */
@@ -32,6 +33,13 @@ final class HgSettingsSections {
     static final int MODE_STOCK_REBOOT = 3;
     /** Nothing of ours runs this boot (rolled back, not set up, refused): hidden, the reason. */
     static final int MODE_OFF = 4;
+
+    /** The status card: ours run this boot. */
+    static final int STATUS_ON = 0;
+    /** The status card: HyperOS's gestures and recents run this boot. */
+    static final int STATUS_STANDBY = 1;
+    /** The status card: nothing of ours runs this boot. */
+    static final int STATUS_OFF = 2;
 
     private HgSettingsSections() {}
 
@@ -80,13 +88,27 @@ final class HgSettingsSections {
     static boolean shows(int section, int mode) {
         boolean ours = mode == MODE_ACTIVE || mode == MODE_ACTIVE_REBOOT;
         switch (section) {
-            case NOTE:
-                return mode != MODE_ACTIVE;
+            case STATUS:
+                return true;
             case RECENTS:
             case GESTURES:
                 return ours;
             default:
                 return true;
+        }
+    }
+
+    /** The status card's kind (STATUS_ON, STATUS_STANDBY or STATUS_OFF) in {@code mode}. */
+    static int statusKind(int mode) {
+        switch (mode) {
+            case MODE_ACTIVE:
+            case MODE_ACTIVE_REBOOT:
+                return STATUS_ON;
+            case MODE_STOCK:
+            case MODE_STOCK_REBOOT:
+                return STATUS_STANDBY;
+            default:
+                return STATUS_OFF;
         }
     }
 }

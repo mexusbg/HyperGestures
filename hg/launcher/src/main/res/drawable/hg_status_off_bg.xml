@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: the status card's background while nothing of ours runs (HgSettingsFragment). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="@dimen/hg_settings_card_radius" />
+    <gradient
+        android:angle="315"
+        android:startColor="@color/hg_status_off_start"
+        android:endColor="@color/hg_status_off_end"
+        android:type="linear" />
+</shape>

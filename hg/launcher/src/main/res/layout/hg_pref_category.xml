@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: a section's header above its card (HgPreferenceTheme): small and quiet, just
+     inside the card's edge. PreferenceCategory binds the title by its id. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/title"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="24dp"
+    android:paddingTop="28dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="10dp"
+    android:textAppearance="?attr/textAppearanceLabelLarge"
+    android:textColor="?android:attr/textColorSecondary" />

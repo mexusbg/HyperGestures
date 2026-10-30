@@ -9,8 +9,75 @@
         <item name="overviewScrimColor">@color/hg_overview_scrim</item>
     </style>
 
-    <!-- The settings page (HgSettingsActivity): Material 3, light or dark with the system. -->
+    <!-- The settings page (HgSettingsActivity): Material 3, light or dark with the system, in
+         the page's own palette (hg_settings_colors) on a gradient window. -->
     <style name="HgSettingsTheme" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="preferenceTheme">@style/PreferenceThemeOverlay</item>
+        <item name="android:windowBackground">@drawable/hg_settings_bg</item>
+        <item name="colorPrimary">@color/hg_settings_primary</item>
+        <item name="colorOnPrimary">@color/hg_settings_on_primary</item>
+        <item name="colorPrimaryContainer">@color/hg_settings_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/hg_settings_on_primary_container</item>
+        <item name="colorSecondary">@color/hg_settings_primary</item>
+        <item name="colorSecondaryContainer">@color/hg_settings_primary_container</item>
+        <item name="colorOnSecondaryContainer">@color/hg_settings_on_primary_container</item>
+        <item name="android:colorBackground">@color/hg_settings_bg_top</item>
+        <item name="colorOnBackground">@color/hg_settings_on_surface</item>
+        <item name="colorSurface">@color/hg_settings_bg_top</item>
+        <item name="colorOnSurface">@color/hg_settings_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/hg_settings_on_surface_variant</item>
+        <item name="colorSurfaceContainer">@color/hg_settings_card</item>
+        <item name="colorSurfaceContainerHigh">@color/hg_settings_dialog</item>
+        <item name="colorSurfaceContainerHighest">@color/hg_settings_outline</item>
+        <item name="colorOutline">@color/hg_settings_on_surface_variant</item>
+        <item name="colorOutlineVariant">@color/hg_settings_outline</item>
+        <item name="android:windowLightStatusBar">@bool/hg_settings_light_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/hg_settings_light_bars</item>
+        <item name="alertDialogTheme">@style/HgSettingsDialog</item>
+        <item name="preferenceTheme">@style/HgPreferenceTheme</item>
+    </style>
+
+    <!-- The settings page's dialogs (a list's choices): a rounded card in the page's colours. -->
+    <style name="HgSettingsDialog" parent="ThemeOverlay.Material3.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/hg_settings_dialog_bg</item>
+    </style>
+
+    <!-- The settings page's large title, and the same title collapsed into the toolbar. -->
+    <style name="HgSettingsExpandedTitle" parent="TextAppearance.Material3.HeadlineLarge">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="HgSettingsCollapsedTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <!-- The settings list's rows (HgSettingsFragment draws the cards behind them): our row
+         layouts (the slider's too), Material 3 switches and a chevron on the lists. -->
+    <style name="HgPreferenceTheme" parent="PreferenceThemeOverlay">
+        <item name="preferenceStyle">@style/HgPreference</item>
+        <item name="seekBarPreferenceStyle">@style/HgSeekBarPreference</item>
+        <item name="preferenceCategoryStyle">@style/HgPreferenceCategory</item>
+        <item name="switchPreferenceCompatStyle">@style/HgSwitchPreference</item>
+        <item name="checkBoxPreferenceStyle">@style/HgCheckBoxPreference</item>
+        <item name="dialogPreferenceStyle">@style/HgDialogPreference</item>
+    </style>
+    <style name="HgPreference" parent="Preference.Material">
+        <item name="android:layout">@layout/hg_pref_row</item>
+    </style>
+    <style name="HgSeekBarPreference" parent="Preference.SeekBarPreference.Material">
+        <item name="android:layout">@layout/hg_pref_seekbar</item>
+    </style>
+    <style name="HgPreferenceCategory" parent="Preference.Category.Material">
+        <item name="android:layout">@layout/hg_pref_category</item>
+    </style>
+    <style name="HgSwitchPreference" parent="Preference.SwitchPreferenceCompat.Material">
+        <item name="android:layout">@layout/hg_pref_row</item>
+        <item name="android:widgetLayout">@layout/hg_pref_switch</item>
+    </style>
+    <style name="HgCheckBoxPreference" parent="Preference.CheckBoxPreference.Material">
+        <item name="android:layout">@layout/hg_pref_row</item>
+    </style>
+    <style name="HgDialogPreference" parent="Preference.DialogPreference.Material">
+        <item name="android:layout">@layout/hg_pref_row_value</item>
+        <item name="android:widgetLayout">@layout/hg_pref_chevron</item>
     </style>
 </resources>

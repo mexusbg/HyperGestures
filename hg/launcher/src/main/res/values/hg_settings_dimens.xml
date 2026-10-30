@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: the settings page's measures (HgSettingsFragment, its layouts). -->
+<resources>
+    <!-- A card's corners where it begins and ends (HgSettingsCards.radii) -->
+    <dimen name="hg_settings_card_radius">28dp</dimen>
+    <!-- Between the screen's edge and a card -->
+    <dimen name="hg_settings_card_margin">16dp</dimen>
+    <!-- Inside a card, before a row's text -->
+    <dimen name="hg_settings_row_padding">20dp</dimen>
+    <!-- Below the last card -->
+    <dimen name="hg_settings_list_bottom">32dp</dimen>
+</resources>

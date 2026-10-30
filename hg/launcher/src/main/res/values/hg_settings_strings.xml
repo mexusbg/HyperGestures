@@ -19,6 +19,15 @@
         while the system launcher is the home app. Choose another home app and reboot to use
         HyperGestures\' recents and gestures.</string>
 
+    <!-- The status card at the top of the page: its headline while HyperGestures runs, while
+         HyperOS's own gestures and recents run, and while nothing of ours runs -->
+    <string name="hg_settings_status_card_on">Running</string>
+    <string name="hg_settings_status_card_standby">Standing by</string>
+    <string name="hg_settings_status_card_off">Not running</string>
+    <!-- The status card's note while HyperGestures runs and nothing needs doing -->
+    <string name="hg_settings_status_card_on_note">Recents, gestures and back are handled by
+        HyperGestures.</string>
+
     <!-- Recents layout: list title, and its three choices -->
     <string name="hg_settings_layout">Layout</string>
     <!-- HyperOS's vertical layout: two columns of cards, scrolling up and down -->

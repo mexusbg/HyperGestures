@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: the settings page's palette (dark), from the app icon's sunset: violet
+     accent on an ink background, cards one step lighter. HgSettingsTheme maps it onto Material 3's
+     colour roles; the status card's gradients (hg_status_*_bg) are the same in both themes. -->
+<resources>
+    <color name="hg_settings_bg_top">#FF1C1832</color>
+    <color name="hg_settings_bg_bottom">#FF0D0B17</color>
+    <color name="hg_settings_card">#FF25213B</color>
+    <color name="hg_settings_dialog">#FF2A2542</color>
+    <color name="hg_settings_on_surface">#FFEEEAF8</color>
+    <color name="hg_settings_on_surface_variant">#FFABA4C0</color>
+    <color name="hg_settings_outline">#FF4A4560</color>
+    <color name="hg_settings_primary">#FFBDB2FF</color>
+    <color name="hg_settings_on_primary">#FF2A1D78</color>
+    <color name="hg_settings_primary_container">#FF3F339A</color>
+    <color name="hg_settings_on_primary_container">#FFE6E0FF</color>
+</resources>

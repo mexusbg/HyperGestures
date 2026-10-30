@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: the mark of a settings row that opens a web page (HgSettingsFragment). -->
+<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="20dp"
+    android:layout_height="20dp"
+    android:importantForAccessibility="no"
+    android:src="@drawable/hg_ic_settings_open"
+    android:tint="?android:attr/textColorSecondary" />
