@@ -43,6 +43,31 @@ public class NotifFixLogicTest {
         assertFalse(NotifKeys.hookedThisBoot(boot, null));
         assertFalse(NotifKeys.hookedThisBoot("", ""));
         assertFalse(NotifKeys.hookedThisBoot(boot + "x".repeat(64), boot));
+        assertTrue(NotifKeys.hookedThisBoot(boot + " systemui,aod", boot));
+        assertFalse(NotifKeys.hookedThisBoot("another-boot systemui", boot));
+    }
+
+    /** The mark lists the scopes the hooks were installed in; an older mark means SystemUI. */
+    @Test public void hookedScopes() {
+        String boot = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
+        assertEquals(java.util.List.of("systemui"), NotifKeys.hookedScopes(boot, boot));
+        assertEquals(java.util.List.of("systemui", "aod"),
+                NotifKeys.hookedScopes(boot + " systemui,aod\n", boot));
+        assertEquals(java.util.List.of(), NotifKeys.hookedScopes("another-boot systemui", boot));
+        assertEquals(java.util.List.of(), NotifKeys.hookedScopes(null, boot));
+        assertEquals(java.util.List.of(), NotifKeys.hookedScopes(boot, null));
+        // Unknown names are dropped, so a newer APK's scope cannot show as garbage.
+        assertEquals(java.util.List.of("systemui"),
+                NotifKeys.hookedScopes(boot + " systemui,x y", boot));
+    }
+
+    /** What SystemUI writes: the boot id, then the scopes in the order they were hooked. */
+    @Test public void hookedValue() {
+        String boot = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
+        String value = NotifKeys.hookedValue(boot, java.util.List.of("systemui", "aod"));
+        assertEquals(boot + " systemui,aod", value);
+        assertTrue(value.length() <= NotifKeys.HOOKED_VALUE_MAX);
+        assertEquals(java.util.List.of("systemui", "aod"), NotifKeys.hookedScopes(value, boot));
     }
 
     /** HyperNotificationFix's hook frames below ours mean its hook runs ahead: stand down. */

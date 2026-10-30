@@ -58,7 +58,6 @@
         <item name="seekBarPreferenceStyle">@style/HgSeekBarPreference</item>
         <item name="preferenceCategoryStyle">@style/HgPreferenceCategory</item>
         <item name="switchPreferenceCompatStyle">@style/HgSwitchPreference</item>
-        <item name="checkBoxPreferenceStyle">@style/HgCheckBoxPreference</item>
         <item name="dialogPreferenceStyle">@style/HgDialogPreference</item>
     </style>
     <style name="HgPreference" parent="Preference.Material">
@@ -73,9 +72,6 @@
     <style name="HgSwitchPreference" parent="Preference.SwitchPreferenceCompat.Material">
         <item name="android:layout">@layout/hg_pref_row</item>
         <item name="android:widgetLayout">@layout/hg_pref_switch</item>
-    </style>
-    <style name="HgCheckBoxPreference" parent="Preference.CheckBoxPreference.Material">
-        <item name="android:layout">@layout/hg_pref_row</item>
     </style>
     <style name="HgDialogPreference" parent="Preference.DialogPreference.Material">
         <item name="android:layout">@layout/hg_pref_row_value</item>

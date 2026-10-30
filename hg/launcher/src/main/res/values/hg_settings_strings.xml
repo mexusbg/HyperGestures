@@ -28,6 +28,54 @@
     <string name="hg_settings_status_card_on_note">Recents, gestures and back are handled by
         HyperGestures.</string>
 
+    <!-- The status card's version pill: the app's versionName -->
+    <string name="hg_status_version">v%1$s</string>
+    <!-- The status card's list (HgStatusCard): each fact's label and its values -->
+    <string name="hg_status_module">Module</string>
+    <!-- The module's state this boot (hg_publish_status), with its health check's verdict -->
+    <string name="hg_status_state_active">Active</string>
+    <string name="hg_status_state_checking">Active, checking</string>
+    <string name="hg_status_state_health_failed">Health check failed</string>
+    <string name="hg_status_state_starting">Starting</string>
+    <!-- HyperOS's own gestures and recents run: the system launcher is the home app -->
+    <string name="hg_status_state_standby">Standing by</string>
+    <string name="hg_status_state_rolled_back">Rolled back</string>
+    <string name="hg_status_state_not_set_up">Not set up</string>
+    <!-- Another firmware than the module was built for -->
+    <string name="hg_status_state_refused">Refused</string>
+    <string name="hg_status_state_none">No status yet</string>
+    <string name="hg_status_mount">Mount</string>
+    <string name="hg_status_mounted">Mounted</string>
+    <!-- %1$s: the metamodule that mounts the app, e.g. "hybrid_mount" -->
+    <string name="hg_status_mounted_via">Via %1$s</string>
+    <string name="hg_status_not_mounted">Not mounted</string>
+    <!-- Rows shown only while the module reports the problem -->
+    <string name="hg_status_problem_metamodule">Metamodule</string>
+    <!-- %1$s: e.g. "hybrid_mount"; the module mounts the app itself from the next boot -->
+    <string name="hg_status_problem_metamodule_value">%1$s missed the app</string>
+    <string name="hg_status_problem_battery">Battery</string>
+    <string name="hg_status_problem_battery_value">No restrictions pending</string>
+    <string name="hg_status_problem_restore">Restore</string>
+    <string name="hg_status_problem_restore_value">Failed, undo by hand</string>
+    <string name="hg_status_recents">Recents provider</string>
+    <string name="hg_status_gestures">Gestures &amp; back</string>
+    <string name="hg_status_by_us">HyperGestures</string>
+    <string name="hg_status_by_system">System</string>
+    <!-- hypergestures_health_facts is 0: nothing is published to tell -->
+    <string name="hg_status_unknown">Unknown</string>
+    <string name="hg_status_hooks">LSPosed hooks</string>
+    <string name="hg_status_hooks_not_loaded">Not loaded</string>
+    <string name="hg_status_scope_systemui">System UI</string>
+    <string name="hg_status_scope_aod">AOD</string>
+    <string name="hg_status_reboot">Reboot</string>
+    <string name="hg_status_reboot_not_needed">Not needed</string>
+    <!-- What waits for a reboot, e.g. "Pending for nav line, module update" -->
+    <string name="hg_status_reboot_pending">Pending for %1$s</string>
+    <string name="hg_status_reason_home">home app change</string>
+    <string name="hg_status_reason_nav_line">nav line</string>
+    <string name="hg_status_reason_module_update">module update</string>
+    <string name="hg_status_reason_app_update">app update</string>
+
     <!-- Recents layout: list title, and its three choices -->
     <string name="hg_settings_layout">Layout</string>
     <!-- HyperOS's vertical layout: two columns of cards, scrolling up and down -->
@@ -76,13 +124,15 @@
     <string name="hg_settings_nav_line_hide_summary">The System launcher\'s own setting, as on stock
         HyperOS: Circle to Search on a long press is off while the line is hidden. With
         HyperGestures\' gestures it takes effect after a reboot.</string>
-    <!-- What a long press on the line does (Settings.Secure NavLongPress, shared with the System
-         launcher); shown while the line is not hidden -->
-    <string name="hg_settings_nav_long_press">Long press navigation line</string>
-    <string name="hg_settings_nav_long_press_cts">Circle to Search</string>
-    <string name="hg_settings_nav_long_press_none">None</string>
-    <!-- Summary when the System launcher set another app's action, which HyperGestures cannot
-         run -->
+    <!-- Circle to Search on a long press of the navigation line (the System launcher's
+         NavLongPress), and its line while the System launcher's hide is on -->
+    <string name="hg_settings_cts">Circle to Search</string>
+    <string name="hg_settings_cts_summary">Long press the navigation line to search what\'s on
+        screen</string>
+    <string name="hg_settings_cts_summary_hidden">Long press the navigation line. Off while Hide
+        navigation line is on</string>
+    <!-- Second line of Circle to Search when the System launcher set another app's action, which
+         HyperGestures cannot run -->
     <string name="hg_settings_nav_long_press_other">Another app\'s action, set in the System
         launcher: HyperGestures does nothing on a long press</string>
     <!-- Our overlay (HgHideGestureLine), shown while the System launcher's hide is off. SystemUI
@@ -178,32 +228,6 @@
         %1$s.</string>
     <string name="hg_settings_note_refused">HyperGestures did not set up: this phone runs another
         firmware than it was built for (STRICT_FIRMWARE=1). Rebuild the module for it.</string>
-
-    <!-- About: the module's state this boot (hg_publish_status), one fact per line -->
-    <string name="hg_settings_module_status">Module status</string>
-    <string name="hg_settings_status_unknown">No status from the module for this boot
-        yet</string>
-    <string name="hg_settings_status_starting">Starting (setup not finished)</string>
-    <string name="hg_settings_status_active">Active</string>
-    <string name="hg_settings_status_dormant">Dormant: HyperOS\'s own gestures and recents (the
-        system launcher is the home app)</string>
-    <string name="hg_settings_status_rolled_back">Rolled back and disabled</string>
-    <string name="hg_settings_status_not_set_up">Not set up this boot</string>
-    <string name="hg_settings_status_refused">Refused: another firmware</string>
-    <!-- %1$s: the health check's result, e.g. "ok: provider bound, no crash loop, ..." -->
-    <string name="hg_settings_status_health">Health: %1$s</string>
-    <!-- %1$s: the mount mode, e.g. "auto → self (no active metamodule)"; %2$s: its result -->
-    <string name="hg_settings_status_mount">Mount: %1$s; %2$s</string>
-    <!-- %1$s: the metamodule and its versionCode, e.g. "hybrid_mount 170" -->
-    <string name="hg_settings_status_metamodule">Problem: the metamodule %1$s did not mount the
-        app, so the module mounts it itself</string>
-    <!-- %1$s: e.g. "app 49, module 50" -->
-    <string name="hg_settings_status_stale_apk">Problem: update not applied (%1$s): reboot
-        once more</string>
-    <string name="hg_settings_status_power_pending">Problem: the battery setting \"No
-        restrictions\" is not set yet (retrying); HyperOS may freeze the app briefly</string>
-    <string name="hg_settings_status_restore_gave_up">Problem: undoing HyperGestures\' changes
-        failed on earlier boots; restore them by hand</string>
 
     <!-- Toast when a setting could not be written -->
     <string name="hg_settings_write_failed">Could not change the setting</string>

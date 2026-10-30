@@ -7,7 +7,7 @@
 // a file in our data dir: root must never write into a dir we control. Only a value whose bootId
 // is this boot's counts: an earlier boot's says nothing about this one (service.sh has not
 // published yet, or the module did not run). The settings page decides its sections by the state
-// (HgSettingsSections.mode) and About shows the rest; Save logs lists the value as it is.
+// (HgSettingsSections.mode), its status card the mount (HgStatusCard); Save logs lists it as it is.
 package com.android.quickstep;
 
 import android.content.Context;

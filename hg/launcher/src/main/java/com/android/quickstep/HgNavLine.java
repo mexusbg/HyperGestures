@@ -19,8 +19,12 @@
 // Our gesture service (InputConsumerUtils) asks longPressStartsSearch at each touch-down before it
 // adds the long-press consumer, so a change applies to the next touch without an observer: the
 // settings provider's in-process cache answers most reads without a binder call. The settings
-// page (HgSettingsFragment) shows the long press choice and our own overlay-based "Hide
-// navigation line (alternative)" only while this hide is off (dependentsShown).
+// page (HgSettingsFragment) shows the long press as a "Circle to Search" switch (owner,
+// 2026-10-30): on for Circle to Search, off for nothing. While this hide is on the switch shows
+// off and is disabled (switchShownOn, switchEnabled), as no long press searches then; NavLongPress
+// keeps its value, so turning the hide off shows the earlier choice again. Our own overlay-based
+// "Hide navigation line (alternative)" shows only while this hide is off (dependentsShown) and
+// does not touch the switch.
 package com.android.quickstep;
 
 import android.content.ContentResolver;
@@ -79,25 +83,26 @@ public final class HgNavLine {
     }
 
     /**
-     * Whether the page shows the items that only matter on a visible line: the long press choice
-     * and "Hide navigation line (alternative)" (owner, 2026-10-18).
+     * Whether the page shows "Hide navigation line (alternative)", which only matters on a
+     * visible line (owner, 2026-10-18).
      */
     static boolean dependentsShown(boolean lineHidden) {
         return !lineHidden;
     }
 
-    /** The page's list value for an action: "cts", "none", or null (another app's action). */
-    static String choice(int action) {
-        switch (action) {
-            case ACTION_CTS: return "cts";
-            case ACTION_NONE: return "none";
-            default: return null;
-        }
+    /** Whether the Circle to Search switch shows on: what a long press does now. */
+    static boolean switchShownOn(boolean lineHidden, int action) {
+        return longPressStartsSearch(lineHidden, action);
     }
 
-    /** NavLongPress's value for a list value ("cts" or "none"). */
-    static String valueForChoice(String choice) {
-        return "cts".equals(choice) ? CTS : NONE;
+    /** Whether the Circle to Search switch can be changed: not while the line is hidden. */
+    static boolean switchEnabled(boolean lineHidden) {
+        return !lineHidden;
+    }
+
+    /** NavLongPress's value for the Circle to Search switch: on searches, off does nothing. */
+    static String valueForSwitch(boolean on) {
+        return on ? CTS : NONE;
     }
 
     /** The settings as they are now: hidden line, and the long press action. */

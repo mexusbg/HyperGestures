@@ -25,10 +25,18 @@ public final class NotifKeys {
 
     /**
      * Settings.Global key SystemUI writes this boot's id to once our hooks are installed there,
-     * so the settings page, which runs in the main app where the hooks never do, can tell
-     * whether LSPosed loaded them this boot ({@link #hookedThisBoot}).
+     * then a space and the scopes they were installed in, comma-separated ({@link #hookedValue}:
+     * {@link #SCOPE_SYSTEMUI} first, {@link #SCOPE_AOD} once the always-on display's classes
+     * were hooked inside SystemUI). The settings page, which runs in the main app where the hooks
+     * never do, can so tell whether LSPosed loaded them this boot ({@link #hookedThisBoot}) and
+     * where ({@link #hookedScopes}). An older APK wrote the id alone: SystemUI.
      */
     public static final String HOOKED_KEY = "hypergestures_notif_hooked";
+
+    /** The hooks run in SystemUI (its notification icons). */
+    public static final String SCOPE_SYSTEMUI = "systemui";
+    /** The always-on display's icon hooks are installed (inside SystemUI, where it is drawn). */
+    public static final String SCOPE_AOD = "aod";
 
     /** A boot id is a 36-character UUID; anything longer in the setting is not ours. */
     public static final int HOOKED_VALUE_MAX = 64;
@@ -47,6 +55,35 @@ public final class NotifKeys {
      */
     public static boolean hookedThisBoot(String value, String bootId) {
         if (value == null || bootId == null || value.length() > HOOKED_VALUE_MAX) return false;
-        return !bootId.isEmpty() && bootId.equals(value.trim());
+        String v = value.trim();
+        int space = v.indexOf(' ');
+        return !bootId.isEmpty() && bootId.equals(space < 0 ? v : v.substring(0, space));
+    }
+
+    /**
+     * The scopes {@link #HOOKED_KEY}'s {@code value} names for this boot ({@code bootId}), in
+     * order; empty when it is not this boot's. The id alone (an older APK) means SystemUI; names
+     * this APK does not know are dropped.
+     */
+    public static java.util.List<String> hookedScopes(String value, String bootId) {
+        java.util.List<String> scopes = new java.util.ArrayList<>();
+        if (!hookedThisBoot(value, bootId)) return scopes;
+        String v = value.trim();
+        int space = v.indexOf(' ');
+        if (space < 0) {
+            scopes.add(SCOPE_SYSTEMUI);
+            return scopes;
+        }
+        for (String s : v.substring(space + 1).split(",")) {
+            if ((SCOPE_SYSTEMUI.equals(s) || SCOPE_AOD.equals(s)) && !scopes.contains(s)) {
+                scopes.add(s);
+            }
+        }
+        return scopes;
+    }
+
+    /** {@link #HOOKED_KEY}'s value for {@code bootId} and {@code scopes} (in order). */
+    public static String hookedValue(String bootId, java.util.Collection<String> scopes) {
+        return bootId + " " + String.join(",", scopes);
     }
 }

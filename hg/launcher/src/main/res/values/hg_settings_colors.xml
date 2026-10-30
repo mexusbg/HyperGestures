@@ -31,4 +31,13 @@
     <color name="hg_status_off_end">#FF4A2232</color>
     <color name="hg_status_text">#FFFFFFFF</color>
     <color name="hg_status_text_secondary">#FFE6E8FF</color>
+    <!-- The version pill, the status list's panel and its dividers, over the card -->
+    <color name="hg_status_pill">#29FFFFFF</color>
+    <color name="hg_status_list">#1AFFFFFF</color>
+    <color name="hg_status_divider">#1FFFFFFF</color>
+    <!-- The status list's dots: OK, pending, failed, nothing to say (HgStatusCard levels) -->
+    <color name="hg_status_ok">#FF9FF0C0</color>
+    <color name="hg_status_pending">#FFFFD48A</color>
+    <color name="hg_status_failed">#FFFF9E9E</color>
+    <color name="hg_status_neutral">#FFB9B8CC</color>
 </resources>

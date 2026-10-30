@@ -9,7 +9,7 @@
 // Nothing is stored in the app, so adb and the page always agree; the values are read again
 // whenever the page resumes. Writes need WRITE_SECURE_SETTINGS (Global, Secure) and
 // WRITE_SETTINGS (System), both granted; a failed write leaves the switch as it was and toasts.
-// Plus Save logs (HgLogCollector), versions, the module's status, the author, the license (CC
+// Plus Save logs (HgLogCollector), versions, the author, the license (CC
 // BY-NC-SA 4.0, a tap opens its deed) and a Ko-fi link (the browser; a toast without one). Sections: Recents and Gestures (ours, only while they
 // run), System (works with any home app: "Hide navigation line", the System launcher's; while
 // it is off "Long press navigation line" and "Hide navigation line (alternative)", our overlay;
@@ -20,16 +20,19 @@
 // hide Recents and Gestures behind a note, and a HOME changed since the boot adds "reboot"
 // (HgSettingsSections). HOME is HgHome's, as everywhere in the app (the HOME role holder; the
 // chooser and a setup wizard are none); without a status for this boot it alone decides.
-// Looks: a status card at the top (running, standing by or not running, with the note), then each
+// Looks: a status card at the top (running, standing by or not running, with the note, the app's
+// version and the status list, HgStatusCard, read on the helper thread at each resume), then each
 // section's rows on one rounded card under a quiet header (HgSettingsCards; the rows' layouts and
 // switches are HgPreferenceTheme's), lists marked by a chevron and web links by an open mark.
 package com.android.quickstep;
 
+import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.annotation.SuppressLint;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
@@ -45,7 +48,6 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.preference.CheckBoxPreference;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
@@ -89,15 +91,18 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
     /** Each preference's read of its setting, run on every resume. */
     private final List<Runnable> mRefreshers = new ArrayList<>();
     private Preference mSave;
-    private CheckBoxPreference mFilter;
+    private SwitchPreferenceCompat mFilter;
     /** The page's parts, by HgSettingsSections' ids, shown or hidden for this boot's state. */
     private final Preference[] mSections = new Preference[HgSettingsSections.ABOUT + 1];
+    /** The status card (HgStatusCardPreference). */
+    private HgStatusCardPreference mStatusCard;
+    /** Our own versionCode; -1 if unreadable. */
+    private long mAppCode = -1;
     /** The status card's kind (HgSettingsSections.STATUS_*), its background's. */
     private int mStatusKind = HgSettingsSections.STATUS_ON;
-    /** About's "Module status" line, read again on each resume. */
-    private Preference mModuleStatus;
+    /** Disabled and shown off while the System launcher's hide is on (updateCircleToSearch). */
+    private SwitchPreferenceCompat mCircleToSearch;
     /** Shown only while the System launcher's line is visible (HgNavLine.dependentsShown). */
-    private Preference mLongPress;
     private Preference mAltHide;
 
     @Override
@@ -114,11 +119,9 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         }
         HgSettingsMigration.run(ctx); // layout copied from HyperOS once; dropped switch keys
 
-        Preference status = new Preference(ctx); // follows the mode (updateSections)
-        status.setLayoutResource(R.layout.hg_pref_status);
-        status.setSelectable(false);
-        screen.addPreference(status);
-        mSections[HgSettingsSections.STATUS] = status;
+        mStatusCard = new HgStatusCardPreference(ctx); // follows the mode (updateSections)
+        screen.addPreference(mStatusCard);
+        mSections[HgSettingsSections.STATUS] = mStatusCard;
 
         PreferenceGroup recents = category(screen, R.string.hg_settings_recents);
         mSections[HgSettingsSections.RECENTS] = recents;
@@ -151,7 +154,7 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         PreferenceGroup system = category(screen, R.string.hg_settings_system);
         mSections[HgSettingsSections.SYSTEM] = system;
         addNavLineHide(system);
-        mLongPress = addNavLongPress(system);
+        mCircleToSearch = addCircleToSearch(system);
         mAltHide = addHideLine(system);
         addNotificationIcons(system);
         addAppInfoFix(system);
@@ -163,7 +166,7 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         privacy.setSelectable(false);
         privacy.setIconSpaceReserved(false);
         logs.addPreference(privacy);
-        mFilter = new CheckBoxPreference(ctx);
+        mFilter = new SwitchPreferenceCompat(ctx); // an on/off, as every other row
         mFilter.setKey(PREF_LOG_FILTER);
         mFilter.setDefaultValue(true);
         mFilter.setTitle(R.string.hg_settings_logs_filter);
@@ -185,12 +188,13 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
         try {
             PackageInfo pi = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0);
             appCode = pi.getLongVersionCode();
+            mAppCode = appCode;
+            mStatusCard.setVersion(getString(R.string.hg_status_version, pi.versionName));
             addInfo(about, R.string.hg_settings_app_version, getString(R.string.hg_settings_version,
                     pi.versionName, (int) appCode));
         } catch (Exception e) {
             Log.w(TAG, "own package info unreadable: " + e);
         }
-        mModuleStatus = addInfo(about, R.string.hg_settings_module_status, null);
         // Last in About, after the module version lines added later (explicit order).
         addInfo(about, R.string.hg_settings_author, getString(R.string.hg_settings_author_name))
                 .setOrder(ABOUT_END_ORDER);
@@ -366,7 +370,186 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
             }
             card.setSummary(noteText(mode, status));
         }
-        if (mModuleStatus != null) mModuleStatus.setSummary(statusText(status));
+        refreshStatusList(mode, status);
+    }
+
+    /**
+     * The status card's list (HgStatusCard), read on the helper thread (settings, /proc, the
+     * overlay manager, the module's files) after any hide-line sync queued before it, then shown.
+     */
+    private void refreshStatusList(int mode, HgModuleStatus status) {
+        HgStatusCardPreference card = mStatusCard;
+        if (card == null) return;
+        Context app = requireContext().getApplicationContext();
+        long appCode = mAppCode;
+        Executors.UI_HELPER_EXECUTOR.execute(() -> {
+            List<HgStatusCardPreference.Item> items = statusItems(app, mode, status, appCode);
+            Executors.MAIN_EXECUTOR.execute(() -> {
+                if (isAdded()) card.setItems(items);
+            });
+        });
+    }
+
+    /** The status list's rows from this boot's runtime state (HgStatusCard); off main. */
+    private static List<HgStatusCardPreference.Item> statusItems(Context app, int mode,
+            HgModuleStatus status, long appCode) {
+        ContentResolver cr = app.getContentResolver();
+        String bootId = HgLogCollector.bootId();
+        boolean system = (app.getApplicationInfo().flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+        boolean factsOn = HgRecentsSettings.isOn(global(cr, HgRecentsSettings.HEALTH_FACTS));
+        boolean starting = status != null && HgModuleStatus.STARTING.equals(status.state);
+        HgLogCollector.RunningModule running = HgLogCollector.runningModule(app);
+        boolean moduleUpdate = HgLogCollector.moduleUpdate(app, running) != null;
+        boolean appUpdate = (appCode >= 0 && HgModuleStatus.appBehind(appCode, running) != null)
+                || (status != null && !status.staleApk.isEmpty());
+
+        List<HgStatusCardPreference.Item> items = new ArrayList<>();
+        item(items, app, R.string.hg_status_module, HgStatusCard.module(
+                status == null ? null : status.state, status == null ? "" : status.health));
+        item(items, app, R.string.hg_status_mount, HgStatusCard.mount(system,
+                status == null ? "" : status.mount, status == null ? "" : status.mountMode));
+        item(items, app, R.string.hg_status_recents, HgStatusCard.provider(
+                factHolds(app, cr, HgHealthFacts.PROVIDER_BOUND, bootId), mode, starting,
+                factsOn));
+        item(items, app, R.string.hg_status_gestures, HgStatusCard.provider(
+                factHolds(app, cr, HgHealthFacts.GESTURE_MONITOR, bootId), mode, starting,
+                factsOn));
+        item(items, app, R.string.hg_status_hooks, HgStatusCard.hooks(
+                NotifKeys.hookedScopes(global(cr, NotifKeys.HOOKED_KEY), bootId),
+                NotifKeys.isOn(global(cr, NotifKeys.KEY))));
+        item(items, app, R.string.hg_status_reboot, HgStatusCard.reboot(
+                HgStatusCard.rebootReasons(mode, HgHideGestureLine.status(app), moduleUpdate,
+                        appUpdate)));
+        if (status != null) {
+            for (HgStatusCard.Row problem : HgStatusCard.problems(status.metamoduleMissed,
+                    status.powerPending, status.restoreGaveUp)) {
+                item(items, app, problemLabel(problem.value), problem);
+            }
+        }
+        return items;
+    }
+
+    private static void item(List<HgStatusCardPreference.Item> items, Context app, int label,
+            HgStatusCard.Row row) {
+        items.add(new HgStatusCardPreference.Item(app.getString(label), valueText(app, row),
+                row.level));
+    }
+
+    private static int problemLabel(int value) {
+        switch (value) {
+            case HgStatusCard.PROBLEM_METAMODULE: return R.string.hg_status_problem_metamodule;
+            case HgStatusCard.PROBLEM_BATTERY: return R.string.hg_status_problem_battery;
+            default: return R.string.hg_status_problem_restore;
+        }
+    }
+
+    /** A row's value as the card shows it. */
+    private static String valueText(Context app, HgStatusCard.Row row) {
+        switch (row.value) {
+            case HgStatusCard.STATE_ACTIVE:
+                return app.getString(R.string.hg_status_state_active);
+            case HgStatusCard.STATE_CHECKING:
+                return app.getString(R.string.hg_status_state_checking);
+            case HgStatusCard.STATE_HEALTH_FAILED:
+                return app.getString(R.string.hg_status_state_health_failed);
+            case HgStatusCard.STATE_STARTING:
+                return app.getString(R.string.hg_status_state_starting);
+            case HgStatusCard.STATE_STANDBY:
+                return app.getString(R.string.hg_status_state_standby);
+            case HgStatusCard.STATE_ROLLED_BACK:
+                return app.getString(R.string.hg_status_state_rolled_back);
+            case HgStatusCard.STATE_NOT_SET_UP:
+                return app.getString(R.string.hg_status_state_not_set_up);
+            case HgStatusCard.STATE_REFUSED:
+                return app.getString(R.string.hg_status_state_refused);
+            case HgStatusCard.STATE_NONE:
+                return app.getString(R.string.hg_status_state_none);
+            case HgStatusCard.STATE_OTHER:
+                return row.detail;
+            case HgStatusCard.MOUNTED:
+                return app.getString(R.string.hg_status_mounted);
+            case HgStatusCard.MOUNTED_VIA:
+                return app.getString(R.string.hg_status_mounted_via, row.detail);
+            case HgStatusCard.NOT_MOUNTED:
+                return app.getString(R.string.hg_status_not_mounted);
+            case HgStatusCard.PROBLEM_METAMODULE:
+                return app.getString(R.string.hg_status_problem_metamodule_value, row.detail);
+            case HgStatusCard.PROBLEM_BATTERY:
+                return app.getString(R.string.hg_status_problem_battery_value);
+            case HgStatusCard.PROBLEM_RESTORE:
+                return app.getString(R.string.hg_status_problem_restore_value);
+            case HgStatusCard.BY_US:
+                return app.getString(R.string.hg_status_by_us);
+            case HgStatusCard.BY_SYSTEM:
+                return app.getString(R.string.hg_status_by_system);
+            case HgStatusCard.HOOKS_LOADED: {
+                List<String> names = new ArrayList<>();
+                for (String scope : row.scopes) {
+                    names.add(app.getString(NotifKeys.SCOPE_AOD.equals(scope)
+                            ? R.string.hg_status_scope_aod : R.string.hg_status_scope_systemui));
+                }
+                return String.join(", ", names);
+            }
+            case HgStatusCard.HOOKS_NOT_LOADED:
+                return app.getString(R.string.hg_status_hooks_not_loaded);
+            case HgStatusCard.REBOOT_NOT_NEEDED:
+                return app.getString(R.string.hg_status_reboot_not_needed);
+            case HgStatusCard.REBOOT_PENDING: {
+                List<String> names = new ArrayList<>();
+                for (int reason : row.reasons) names.add(app.getString(reasonText(reason)));
+                return app.getString(R.string.hg_status_reboot_pending,
+                        String.join(", ", names));
+            }
+            default:
+                return app.getString(R.string.hg_status_unknown);
+        }
+    }
+
+    private static int reasonText(int reason) {
+        switch (reason) {
+            case HgStatusCard.REASON_HOME: return R.string.hg_status_reason_home;
+            case HgStatusCard.REASON_NAV_LINE: return R.string.hg_status_reason_nav_line;
+            case HgStatusCard.REASON_MODULE_UPDATE:
+                return R.string.hg_status_reason_module_update;
+            default: return R.string.hg_status_reason_app_update;
+        }
+    }
+
+    /**
+     * Whether our health fact {@code key} holds: this boot's value, its pid still our main
+     * process (as the module's hg_app_fact counts it). The process is looked up with
+     * ActivityManager, which lists our own app's processes: this page's process may not read
+     * another one's /proc entry, so a /proc check said "System" while ours ran (0.3.9.52).
+     */
+    private static boolean factHolds(Context app, ContentResolver cr, String key, String bootId) {
+        int pid = HgStatusCard.factPid(global(cr, key), bootId);
+        return pid > 0 && HgStatusCard.isMainProcess(processName(app, pid),
+                app.getPackageName());
+    }
+
+    /** The name of our own process {@code pid}; null if there is none. */
+    private static String processName(Context app, int pid) {
+        try {
+            ActivityManager am = app.getSystemService(ActivityManager.class);
+            List<ActivityManager.RunningAppProcessInfo> list =
+                    am == null ? null : am.getRunningAppProcesses();
+            if (list == null) return null;
+            for (ActivityManager.RunningAppProcessInfo info : list) {
+                if (info.pid == pid) return info.processName;
+            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "running processes unreadable: " + e);
+        }
+        return null;
+    }
+
+    private static String global(ContentResolver cr, String key) {
+        try {
+            return Settings.Global.getString(cr, key);
+        } catch (RuntimeException e) {
+            Log.w(TAG, key + " unreadable: " + e);
+            return null;
+        }
     }
 
     /** The status card's note for {@code mode}. */
@@ -388,41 +571,6 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
             default:
                 return getString(R.string.hg_settings_system_home_note);
         }
-    }
-
-    /** About's "Module status": the state, health, mount and each problem, one per line. */
-    private String statusText(HgModuleStatus s) {
-        if (s == null) return getString(R.string.hg_settings_status_unknown);
-        List<String> lines = new ArrayList<>();
-        switch (s.state) {
-            case HgModuleStatus.STARTING:
-                lines.add(getString(R.string.hg_settings_status_starting)); break;
-            case HgModuleStatus.ACTIVE:
-                lines.add(getString(R.string.hg_settings_status_active)); break;
-            case HgModuleStatus.DORMANT:
-                lines.add(getString(R.string.hg_settings_status_dormant)); break;
-            case HgModuleStatus.ROLLED_BACK:
-                lines.add(getString(R.string.hg_settings_status_rolled_back)); break;
-            case HgModuleStatus.NOT_SET_UP:
-                lines.add(getString(R.string.hg_settings_status_not_set_up)); break;
-            case HgModuleStatus.REFUSED:
-                lines.add(getString(R.string.hg_settings_status_refused)); break;
-            default:
-                lines.add(s.state);
-        }
-        if (!s.health.isEmpty()) lines.add(getString(R.string.hg_settings_status_health, s.health));
-        if (!s.mountMode.isEmpty() || !s.mount.isEmpty()) {
-            lines.add(getString(R.string.hg_settings_status_mount, s.mountMode, s.mount));
-        }
-        if (!s.metamoduleMissed.isEmpty()) {
-            lines.add(getString(R.string.hg_settings_status_metamodule, s.metamoduleMissed));
-        }
-        if (!s.staleApk.isEmpty()) {
-            lines.add(getString(R.string.hg_settings_status_stale_apk, s.staleApk));
-        }
-        if (s.powerPending) lines.add(getString(R.string.hg_settings_status_power_pending));
-        if (s.restoreGaveUp) lines.add(getString(R.string.hg_settings_status_restore_gave_up));
-        return String.join("\n", lines);
     }
 
     private static PreferenceGroup category(PreferenceScreen screen, int title) {
@@ -521,12 +669,12 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
     /**
      * "Hide navigation line": the System launcher's own setting, Settings.Global
      * hide_gesture_line, written as MiuiHome writes it (putInt 1 or 0, nothing else; HgNavLine).
-     * While it hides the line, the long press choice and our alternative are hidden: HyperOS
-     * starts no Circle to Search on a hidden line, and our gesture service follows it. The
-     * alternative keeps its value meanwhile, so turning this off returns to what the alternative
-     * says. With our gestures SystemUI ignores hide_gesture_line (it applies it only in HyperOS's
-     * own gesture mode, which we never turn on), so our overlay hides the line too
-     * (HgHideGestureLine.wanted); that shows after a reboot.
+     * While it hides the line, Circle to Search shows off and is disabled (HyperOS starts none on
+     * a hidden line, and our gesture service follows it) and our alternative is hidden. Both keep
+     * their values meanwhile, so turning this off returns to what they say. With our gestures
+     * SystemUI ignores hide_gesture_line (it applies it only in HyperOS's own gesture mode, which
+     * we never turn on), so our overlay hides the line too (HgHideGestureLine.wanted); that shows
+     * after a reboot.
      */
     private void addNavLineHide(PreferenceGroup group) {
         ContentResolver cr = group.getContext().getContentResolver();
@@ -539,60 +687,53 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
                     return ok;
                 },
                 on -> {
-                    boolean shown = HgNavLine.dependentsShown(on);
-                    if (mLongPress != null) mLongPress.setVisible(shown);
-                    if (mAltHide != null) mAltHide.setVisible(shown);
+                    updateCircleToSearch(on);
+                    if (mAltHide != null) mAltHide.setVisible(HgNavLine.dependentsShown(on));
                 });
     }
 
     /**
-     * "Long press navigation line": Circle to Search or nothing, kept in the System launcher's own
-     * Settings.Secure NavLongPress ("launch_google_search" or "none", written as MiuiHome's
+     * "Circle to Search" (owner, 2026-10-30, replacing the long press chooser): a long press on
+     * the line starts it or does nothing, kept in the System launcher's own Settings.Secure
+     * NavLongPress ("launch_google_search" or "none", written as MiuiHome's
      * NavShortcutConfigManager.writeSetting does), so its page and ours are one setting. Our
-     * gesture service reads it at each touch-down (HgNavLine.longPressStartsSearch). An action
-     * another app registered with MiuiHome selects neither choice; the summary says so.
+     * gesture service reads it at each touch-down (HgNavLine.longPressStartsSearch). While the
+     * System launcher's hide is on it shows off and is disabled (updateCircleToSearch); an action
+     * another app registered with MiuiHome shows off, and the summary says so.
      */
-    private Preference addNavLongPress(PreferenceGroup group) {
-        Context ctx = group.getContext();
-        ContentResolver cr = ctx.getContentResolver();
-        ListPreference p = new ListPreference(ctx);
-        // Its dialog fragment finds the preference by key; not persisted (Settings.Secure).
-        p.setKey("hg_nav_long_press");
-        p.setPersistent(false);
-        p.setTitle(R.string.hg_settings_nav_long_press);
-        p.setDialogTitle(R.string.hg_settings_nav_long_press);
-        p.setIconSpaceReserved(false);
-        p.setEntries(new CharSequence[] {getString(R.string.hg_settings_nav_long_press_cts),
-                getString(R.string.hg_settings_nav_long_press_none)});
-        p.setEntryValues(new CharSequence[] {"cts", "none"});
-        p.setOnPreferenceChangeListener((pref, value) -> {
-            String choice = (String) value;
-            if (!write(() -> Settings.Secure.putString(cr, HgNavLine.LONG_PRESS,
-                    HgNavLine.valueForChoice(choice)))) {
-                return false;
-            }
-            p.setSummary(longPressSummary(choice));
-            return true;
-        });
-        group.addPreference(p);
-        mRefreshers.add(() -> {
-            String choice;
-            try {
-                choice = HgNavLine.choice(HgNavLine.actionNow(cr));
-            } catch (RuntimeException e) {
-                Log.w(TAG, "long press setting unreadable: " + e);
-                choice = null;
-            }
-            p.setValue(choice);
-            p.setSummary(longPressSummary(choice));
-        });
-        return p;
+    private SwitchPreferenceCompat addCircleToSearch(PreferenceGroup group) {
+        ContentResolver cr = group.getContext().getContentResolver();
+        return addSwitch(group, R.string.hg_settings_cts, R.string.hg_settings_cts_summary,
+                () -> HgNavLine.switchShownOn(HgNavLine.hiddenNow(cr), HgNavLine.actionNow(cr)),
+                on -> Settings.Secure.putString(cr, HgNavLine.LONG_PRESS,
+                        HgNavLine.valueForSwitch(on)),
+                on -> updateCircleToSearch(HgNavLine.hiddenNow(cr)));
     }
 
-    private String longPressSummary(String choice) {
-        if ("cts".equals(choice)) return getString(R.string.hg_settings_nav_long_press_cts);
-        if ("none".equals(choice)) return getString(R.string.hg_settings_nav_long_press_none);
-        return getString(R.string.hg_settings_nav_long_press_other);
+    /**
+     * Circle to Search for the System launcher's hide ({@code lineHidden}): disabled and shown
+     * off while it hides the line, else what NavLongPress says; the summary to match.
+     */
+    private void updateCircleToSearch(boolean lineHidden) {
+        SwitchPreferenceCompat p = mCircleToSearch;
+        if (p == null) return;
+        int action;
+        try {
+            action = HgNavLine.actionNow(p.getContext().getContentResolver());
+        } catch (RuntimeException e) {
+            Log.w(TAG, "long press setting unreadable: " + e);
+            action = HgNavLine.ACTION_CTS;
+        }
+        p.setEnabled(HgNavLine.switchEnabled(lineHidden));
+        p.setChecked(HgNavLine.switchShownOn(lineHidden, action));
+        if (lineHidden) {
+            p.setSummary(R.string.hg_settings_cts_summary_hidden);
+        } else if (action == HgNavLine.ACTION_OTHER) {
+            p.setSummary(getString(R.string.hg_settings_cts_summary) + "\n"
+                    + getString(R.string.hg_settings_nav_long_press_other));
+        } else {
+            p.setSummary(R.string.hg_settings_cts_summary);
+        }
     }
 
     /**

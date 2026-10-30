@@ -5,7 +5,6 @@ import static com.android.quickstep.HgNavLine.ACTION_NONE;
 import static com.android.quickstep.HgNavLine.ACTION_OTHER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -47,7 +46,7 @@ public class HgNavLineTest {
         assertFalse(HgNavLine.longPressStartsSearch(true, ACTION_NONE));
     }
 
-    /** The long press choice and the alternative hide show only while the line is not hidden. */
+    /** The alternative hide shows only while the line is not hidden. */
     @Test public void dependentsShownOnlyWhileTheLineIsVisible() {
         assertTrue(HgNavLine.dependentsShown(false));
         assertFalse(HgNavLine.dependentsShown(true));
@@ -55,16 +54,25 @@ public class HgNavLineTest {
         assertFalse(HgNavLine.dependentsShown(HgNavLine.isHidden("1")));
     }
 
-    @Test public void pageChoicesMapToMiuiHomeValues() {
-        assertEquals("cts", HgNavLine.choice(ACTION_CTS));
-        assertEquals("none", HgNavLine.choice(ACTION_NONE));
-        assertNull(HgNavLine.choice(ACTION_OTHER));
-        assertEquals("launch_google_search", HgNavLine.valueForChoice("cts"));
-        assertEquals("none", HgNavLine.valueForChoice("none"));
-        // Round trip: what the page writes reads back as the same choice.
-        assertEquals("cts", HgNavLine.choice(HgNavLine.action(
-                HgNavLine.valueForChoice("cts"), "none")));
-        assertEquals("none", HgNavLine.choice(HgNavLine.action(
-                HgNavLine.valueForChoice("none"), null)));
+    /** The Circle to Search switch writes MiuiHome's values, and reads them back. */
+    @Test public void switchMapsToMiuiHomeValues() {
+        assertEquals("launch_google_search", HgNavLine.valueForSwitch(true));
+        assertEquals("none", HgNavLine.valueForSwitch(false));
+        assertEquals(ACTION_CTS, HgNavLine.action(HgNavLine.valueForSwitch(true), "none"));
+        assertEquals(ACTION_NONE, HgNavLine.action(HgNavLine.valueForSwitch(false), null));
+    }
+
+    /**
+     * The switch shows on only for Circle to Search on a visible line; while the System
+     * launcher's hide is on it shows off (and is disabled), and NavLongPress keeps its value, so
+     * turning the hide off shows the earlier choice again.
+     */
+    @Test public void switchShowsOnOnlyForSearchOnAVisibleLine() {
+        assertTrue(HgNavLine.switchShownOn(false, ACTION_CTS));
+        assertFalse(HgNavLine.switchShownOn(true, ACTION_CTS));
+        assertFalse(HgNavLine.switchShownOn(false, ACTION_NONE));
+        assertFalse(HgNavLine.switchShownOn(false, ACTION_OTHER));
+        assertTrue(HgNavLine.switchEnabled(false));
+        assertFalse(HgNavLine.switchEnabled(true));
     }
 }

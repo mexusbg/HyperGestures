@@ -16,6 +16,10 @@ import android.provider.Settings;
 
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * HyperGestures: the fix's on/off switch, Settings.Global {@code hypergestures_notification_icons}
@@ -39,6 +43,9 @@ public final class NotifSetting {
     private static final int MARK_TRIES = 5;
     private static final long MARK_RETRY_MS = 2000;
 
+    /** The scopes hooked so far this boot, in order (NotifKeys.hookedValue); guarded by itself. */
+    private static final Set<String> sScopes = new LinkedHashSet<>();
+
     private static volatile boolean sOn;
     private static volatile boolean sWatching;
 
@@ -46,14 +53,17 @@ public final class NotifSetting {
     }
 
     /**
-     * From SystemUI once the hooks are installed: writes this boot's id to
-     * {@link NotifKeys#HOOKED_KEY}. At hook time SystemUI has no Application yet, so this waits
-     * on the main looper until it has one (the first message after the app is bound, a few
-     * retries at most), then writes off the main thread. SystemUI holds WRITE_SECURE_SETTINGS.
-     * Fails soft: nothing may throw into SystemUI, and a lost mark only makes the page say "not
-     * loaded".
+     * From SystemUI once hooks are installed for {@code scope} (NotifKeys.SCOPE_*): writes this
+     * boot's id and every scope hooked so far to {@link NotifKeys#HOOKED_KEY}. At hook time
+     * SystemUI has no Application yet, so this waits on the main looper until it has one (the
+     * first message after the app is bound, a few retries at most), then writes off the main
+     * thread. SystemUI holds WRITE_SECURE_SETTINGS. Fails soft: nothing may throw into SystemUI,
+     * and a lost mark only makes the page say "not loaded".
      */
-    static void markHooked() {
+    static void markHooked(String scope) {
+        synchronized (sScopes) {
+            if (!sScopes.add(scope)) return;
+        }
         try {
             Handler main = new Handler(Looper.getMainLooper());
             main.post(new Runnable() {
@@ -83,13 +93,18 @@ public final class NotifSetting {
         }
     }
 
-    private static void writeHooked(ContentResolver cr) {
+    private static synchronized void writeHooked(ContentResolver cr) {
         try {
             String bootId = bootId();
+            List<String> scopes;
+            synchronized (sScopes) {
+                scopes = new ArrayList<>(sScopes);
+            }
+            String value = bootId == null ? null : NotifKeys.hookedValue(bootId, scopes);
             if (bootId == null) {
                 Logger.i("hooked mark not written: boot id unreadable");
-            } else if (Settings.Global.putString(cr, NotifKeys.HOOKED_KEY, bootId)) {
-                Logger.i("hooked mark written for this boot");
+            } else if (Settings.Global.putString(cr, NotifKeys.HOOKED_KEY, value)) {
+                Logger.i("hooked mark written for this boot: " + scopes);
             } else {
                 Logger.i("hooked mark not written: the settings provider refused it");
             }

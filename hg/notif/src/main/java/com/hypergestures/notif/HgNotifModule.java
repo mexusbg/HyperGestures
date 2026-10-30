@@ -152,7 +152,7 @@ public class HgNotifModule extends XposedModule {
                 instance = this;
                 install(param.getDefaultClassLoader());
                 // HyperGestures: tell our settings page the hooks run this boot (fails soft).
-                NotifSetting.markHooked();
+                NotifSetting.markHooked(NotifKeys.SCOPE_SYSTEMUI);
             } else if (AOD.equals(pkg) && FIX_AOD_ICON) {
                 installAodHook(param.getDefaultClassLoader());
             }
@@ -255,6 +255,8 @@ public class HgNotifModule extends XposedModule {
             }
             try {
                 installAodHook(loader);
+                // HyperGestures: the page lists the AOD among the hooked scopes (fails soft).
+                NotifSetting.markHooked(NotifKeys.SCOPE_AOD);
                 Logger.i("AOD hooks installed, loader found via " + via
                         + " (loader " + Integer.toHexString(System.identityHashCode(loader)) + ")");
             } catch (Throwable t) {

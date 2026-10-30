@@ -7,6 +7,8 @@
     <dimen name="hg_settings_card_margin">16dp</dimen>
     <!-- Inside a card, before a row's text -->
     <dimen name="hg_settings_row_padding">20dp</dimen>
+    <!-- Between the status card's rows -->
+    <dimen name="hg_status_divider">1dp</dimen>
     <!-- Below the last card -->
     <dimen name="hg_settings_list_bottom">32dp</dimen>
 </resources>
