@@ -23,6 +23,7 @@
             app:collapsedTitleTextAppearance="@style/HgSettingsCollapsedTitle"
             app:contentScrim="@color/hg_settings_bg_top"
             app:expandedTitleMarginStart="24dp"
+            app:expandedTitleTextColor="?attr/colorPrimary"
             app:expandedTitleTextAppearance="@style/HgSettingsExpandedTitle"
             app:layout_scrollFlags="scroll|exitUntilCollapsed|snap">
 

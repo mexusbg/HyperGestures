@@ -41,9 +41,10 @@
         <item name="android:windowBackground">@drawable/hg_settings_dialog_bg</item>
     </style>
 
-    <!-- The settings page's large title, and the same title collapsed into the toolbar. -->
+    <!-- The settings page's large title in the accent colour (as HyperOS's About phone shows its
+         name), and the same title collapsed into the toolbar. -->
     <style name="HgSettingsExpandedTitle" parent="TextAppearance.Material3.HeadlineLarge">
-        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
     <style name="HgSettingsCollapsedTitle" parent="TextAppearance.Material3.TitleLarge">

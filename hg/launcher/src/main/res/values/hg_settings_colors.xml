@@ -1,27 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- HyperGestures: the settings page's palette (light), from the app icon's sunset: violet
-     accent on an ink background, cards one step lighter. HgSettingsTheme maps it onto Material 3's
-     colour roles; the status card's gradients (hg_status_*_bg) are the same in both themes. -->
+<!-- HyperGestures: the settings page's palette (light), HyperOS's About phone colours: a teal
+     glow at the top left over deep indigo that fades to black, cards of translucent white and a
+     periwinkle accent. HgSettingsTheme maps it onto Material 3's colour roles; hg_settings_bg
+     layers the background. The status card is the same in both themes.
+     -->
 <resources>
-    <color name="hg_settings_bg_top">#FFF4F1FC</color>
-    <color name="hg_settings_bg_bottom">#FFEAE6F6</color>
-    <color name="hg_settings_card">#FFFFFFFF</color>
-    <color name="hg_settings_dialog">#FFFBFAFF</color>
-    <color name="hg_settings_on_surface">#FF1D1A26</color>
-    <color name="hg_settings_on_surface_variant">#FF5F596F</color>
-    <color name="hg_settings_outline">#FFCAC4D6</color>
-    <color name="hg_settings_primary">#FF5A47D1</color>
+    <color name="hg_settings_bg_top">#FFD9E6F7</color>
+    <color name="hg_settings_bg_middle">#FFE6E3F8</color>
+    <color name="hg_settings_bg_bottom">#FFF7F6FA</color>
+    <color name="hg_settings_bg_glow">#FFC4E0EE</color>
+    <color name="hg_settings_bg_glow_end">#00C4E0EE</color>
+    <color name="hg_settings_bg_shade">#80E7DDF6</color>
+    <color name="hg_settings_bg_shade_end">#00E7DDF6</color>
+    <color name="hg_settings_card">#CCFFFFFF</color>
+    <color name="hg_settings_dialog">#FFFAFAFF</color>
+    <color name="hg_settings_on_surface">#FF15162B</color>
+    <color name="hg_settings_on_surface_variant">#FF5E5C70</color>
+    <color name="hg_settings_outline">#FFC9C8D8</color>
+    <color name="hg_settings_primary">#FF4A57D6</color>
     <color name="hg_settings_on_primary">#FFFFFFFF</color>
-    <color name="hg_settings_primary_container">#FFE4DFFF</color>
-    <color name="hg_settings_on_primary_container">#FF1B0F66</color>
-    <!-- The status card (both themes): white text on the icon's colours, darkened. -->
-    <color name="hg_status_on_start">#FF8A3A5E</color>
-    <color name="hg_status_on_center">#FF6A3784</color>
-    <color name="hg_status_on_end">#FF3E3AA6</color>
-    <color name="hg_status_standby_start">#FF3F3A5C</color>
-    <color name="hg_status_standby_end">#FF2B2946</color>
+    <color name="hg_settings_primary_container">#FFDFE2FF</color>
+    <color name="hg_settings_on_primary_container">#FF10165E</color>
+    <!-- The status card (both themes): white text on the accent's blue to violet, darkened. -->
+    <color name="hg_status_on_start">#FF2E5596</color>
+    <color name="hg_status_on_center">#FF3A3F9E</color>
+    <color name="hg_status_on_end">#FF4E3591</color>
+    <color name="hg_status_standby_start">#FF3A3D5E</color>
+    <color name="hg_status_standby_end">#FF2A2B45</color>
     <color name="hg_status_off_start">#FF85303F</color>
     <color name="hg_status_off_end">#FF4A2232</color>
     <color name="hg_status_text">#FFFFFFFF</color>
-    <color name="hg_status_text_secondary">#FFEDE6FF</color>
+    <color name="hg_status_text_secondary">#FFE6E8FF</color>
 </resources>
