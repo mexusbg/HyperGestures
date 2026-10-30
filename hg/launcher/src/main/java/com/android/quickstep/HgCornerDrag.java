@@ -304,6 +304,11 @@ public final class HgCornerDrag {
     }
 
     /** RecentsView.onGestureAnimationEnd: runs a pending action if the gesture ended in recents. */
+    /** Whether a corner action waits for the gesture's end (RecentsView: then no other move). */
+    public static boolean hasPending() {
+        return sPendingTarget != Target.NONE;
+    }
+
     public static void onGestureAnimationEnd(RecentsView<?, ?> recentsView, boolean endedInRecents) {
         Target target = sPendingTarget;
         int taskId = sPendingTaskId;
