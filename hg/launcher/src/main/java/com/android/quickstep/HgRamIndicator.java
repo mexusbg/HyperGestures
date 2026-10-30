@@ -1,14 +1,12 @@
 // HyperGestures: HyperOS's memory line in recents ("5.3 GB of 16.0 GB available"; HyperOS puts it
-// top right, the owner wanted it at the bottom), shown or hidden by holding the trash button for
-// HOLD_MS (owner, 2026-10-07). A tap on the trash still clears all; a hold that toggles does not.
-//
-// Shown or hidden as in HyperOS (plan ruling R2): by Settings.System miui_recents_show_mem_info
-// (MiuiHome's "Show memory status", 0/1, default 0 = hidden), observed while recents is attached.
-// The hold writes that setting, so MIUI's switch and ours are one. SettingsProvider lets us: a
-// WRITE_SECURE_SETTINGS holder skips the WRITE_SETTINGS app-op for System keys, and a privileged
-// app may write keys outside AOSP's public list (our manifest also requests WRITE_SETTINGS, belt
-// and braces). The app preference the hold used before is carried over once (show_ram on and the
-// system key unset) and then dropped, whether or not that write worked.
+// top right, the owner wanted it at the bottom). Shown or hidden as in HyperOS (plan ruling R2):
+// by Settings.System miui_recents_show_mem_info (MiuiHome's "Show memory status", 0/1, default
+// 0 = hidden), observed while recents is attached; the settings page's "Show memory" switch
+// writes it, so MIUI's switch and ours are one. (Holding the trash button for 5 s toggled it too
+// until 2026-10-31; the owner dropped that hold: the trash button only clears all.) The app
+// preference an older hold used is carried over once (show_ram on and the system key unset) and
+// then dropped, whether or not that write worked. SettingsProvider lets us write it: a
+// WRITE_SECURE_SETTINGS holder skips the WRITE_SETTINGS app-op for System keys.
 // HyperOS also hides the line in multi-window; our recents is never in a small window.
 //
 // The line lives in the recents drag layer (bottom centre, under the trash button) and fades with
@@ -30,8 +28,6 @@ import android.provider.Settings;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.HapticFeedbackConstants;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
@@ -49,10 +45,9 @@ public final class HgRamIndicator {
     private static final String TAG = "HgRamIndicator";
     /** MiuiHome's switch (MiuiSettingsUtils.MIUI_RECENTS_SHOW_MEM_INFO), Settings.System. */
     static final String SHOW_MEM_INFO = "miui_recents_show_mem_info";
-    /** The app preference the hold toggled before the line followed SHOW_MEM_INFO. */
+    /** The app preference an older hold toggled, before the line followed SHOW_MEM_INFO. */
     private static final String OLD_PREFS = "hg_recents";
     private static final String OLD_KEY_SHOW = "show_ram";
-    static final long HOLD_MS = 5000;
     /** Gap between the line and the bottom inset (the gesture bar). */
     private static final float BOTTOM_MARGIN_DP = 6;
 
@@ -70,7 +65,6 @@ public final class HgRamIndicator {
     /** The indicator of the recents window attached last (main thread). */
     private static WeakReference<HgRamIndicator> sAttached = new WeakReference<>(null);
     @Nullable private TextView mLine;
-    private boolean mToggledThisPress;
     /** SHOW_MEM_INFO, read on attach and on each change (sync runs every recents frame). */
     private boolean mShow;
     private float mLastAlpha;
@@ -80,11 +74,10 @@ public final class HgRamIndicator {
         mTrash = trash;
     }
 
-    /** OverviewActionsView.onFinishInflate: wires the trash hold and the memory line. */
+    /** OverviewActionsView.onFinishInflate: wires the memory line under the trash button. */
     public static void attach(View actions, @Nullable View trash) {
         if (trash == null) return;
         HgRamIndicator indicator = new HgRamIndicator(actions, trash);
-        trash.setOnTouchListener(indicator::onTrashTouch);
         actions.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             private final ViewTreeObserver.OnPreDrawListener mSync = () -> {
                 indicator.sync();
@@ -104,7 +97,6 @@ public final class HgRamIndicator {
                 // Not removing the line here: it goes with the same window, and removing a child
                 // of the drag layer while the window dispatches its detach crashes that loop.
                 v.getViewTreeObserver().removeOnPreDrawListener(mSync);
-                indicator.mHandler.removeCallbacks(indicator.mToggle);
                 indicator.observe(false);
             }
         });
@@ -146,42 +138,6 @@ public final class HgRamIndicator {
         long gib = 1L << 30;
         long step = totalBytes <= 4 * gib ? gib : totalBytes <= 8 * gib ? 2 * gib : 4 * gib;
         return (totalBytes + step - 1) & ~(step - 1);
-    }
-
-    private boolean onTrashTouch(View v, MotionEvent ev) {
-        switch (ev.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                mToggledThisPress = false;
-                mHandler.postDelayed(mToggle, HOLD_MS);
-                break;
-            case MotionEvent.ACTION_UP:
-                mHandler.removeCallbacks(mToggle);
-                if (mToggledThisPress) {
-                    v.setPressed(false);
-                    return true; // the hold toggled the line: no Clear all
-                }
-                break;
-            case MotionEvent.ACTION_CANCEL:
-                mHandler.removeCallbacks(mToggle);
-                break;
-            default:
-                break;
-        }
-        return false;
-    }
-
-    private final Runnable mToggle = this::toggle;
-
-    private void toggle() {
-        mToggledThisPress = true;
-        boolean show = !mShow;
-        // Shown or hidden at once; if the write fails, only until recents is next attached.
-        mShow = show;
-        write(mTrash.getContext(), show);
-        mTrash.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-        Log.i(TAG, "memory line " + (show ? "shown" : "hidden"));
-        refresh();
-        sync();
     }
 
     private static boolean write(Context context, boolean show) {

@@ -63,6 +63,15 @@ public final class HgStackLayout {
      */
     public static final int VISIBLE_BEHIND = DECK_DEPTH + 1;
     /**
+     * Whether a card at {@code depth} can be seen, so TalkBack may read it: the deck and the newer
+     * card peeking in on top; not the cards hidden exactly behind the deck's last one, nor newer
+     * cards off the screen (2026-10-31 review: TalkBack read cards nobody could see).
+     */
+    public static boolean shownToAccessibility(float depth) {
+        return depth > -1.5f && depth < DECK_DEPTH + 0.5f;
+    }
+
+    /**
      * Newer cards this many pages away or less reach the screen: the one on top of the focused
      * card at rest, and the next, which slides in from the far edge while the strip scrolls.
      */

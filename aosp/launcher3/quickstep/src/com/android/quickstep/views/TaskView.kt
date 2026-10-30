@@ -2090,8 +2090,12 @@ constructor(
                 vertical.cardAlpha(slot, hgVerticalShownScrollY),
             )
             hgSetHeaderClip(-HG_NO_CLIP, HG_NO_CLIP)
+            hgSetA11yHidden(false)
             return
         }
+        // HyperGestures: TalkBack reads only the stack's cards that can be seen.
+        hgSetA11yHidden(stack != null &&
+            !HgStackLayout.shownToAccessibility(stack.depth(offset + taskOffsetTranslationX)))
         if (stack == null) {
             if (hgStackTranslationX != 0f || hgStackTranslationY != 0f || hgStackScale != 1f ||
                 hgStackDim != 0f || hgStackHeaderAlpha != 1f || hgScrollAlpha != 1f) {
@@ -2162,6 +2166,17 @@ constructor(
             chip.clipBounds = hgClipRect // copied by the view
         }
     }
+
+    /** HyperGestures: hides the card from accessibility (stack cards nobody can see). */
+    private fun hgSetA11yHidden(hidden: Boolean) {
+        if (hidden == hgA11yHidden) return
+        hgA11yHidden = hidden
+        importantForAccessibility =
+            if (hidden) IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            else IMPORTANT_FOR_ACCESSIBILITY_AUTO
+    }
+
+    private var hgA11yHidden = false
 
     private fun hgSetStackValues(
         tx: Float,
