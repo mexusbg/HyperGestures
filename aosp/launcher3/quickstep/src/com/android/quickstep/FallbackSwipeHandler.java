@@ -160,10 +160,13 @@ public class FallbackSwipeHandler extends
 
         mRunningOverHome = mGestureState.getRunningTask() != null
                 && mGestureState.getRunningTask().isHomeTask();
+        // HyperGestures: from an app too, not only over the home app. Behind a translucent app
+        // (Viber's chat screen) the home window is a closing target, and AOSP's default proxy
+        // (ALWAYS_VISIBLE) drew it full screen above recents; this one hides it (alpha 0).
+        runActionOnRemoteHandles(remoteTargetHandle ->
+                remoteTargetHandle.getTransformParams().setHomeBuilderProxy(
+                FallbackSwipeHandler.this::updateHomeActivityTransformDuringSwipeUp));
         if (mRunningOverHome) {
-            runActionOnRemoteHandles(remoteTargetHandle ->
-                    remoteTargetHandle.getTransformParams().setHomeBuilderProxy(
-                    FallbackSwipeHandler.this::updateHomeActivityTransformDuringSwipeUp));
             // HyperGestures: no fade may outlive the gesture's hold on the home window's leash.
             mStateCallback.runOnceAtState(STATE_HANDLER_INVALIDATED, mHgHomeAlpha::cancelAnimation);
             // Recents is hidden behind the home app until attached: no blur meanwhile, and full

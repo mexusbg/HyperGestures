@@ -198,4 +198,21 @@ public class HgHomeGesturePolicyTest {
                 HgHomeGesturePolicy.homeBackStep(
                         1000 + HgHomeGesturePolicy.HOME_BACK_TIMEOUT_MS + 1, 1000, true, 0));
     }
+
+    // --- the home window as a closing target of a swipe from an app ---
+
+    @Test public void homeBehindATranslucentAppIsNotATaskCard() {
+        // Viber's chat screen: Shell sends the home task as a closing target next to the app
+        assertFalse(HgHomeGesturePolicy.isTaskCard(/* isHome= */ true, /* otherApp= */ true));
+        assertTrue(HgHomeGesturePolicy.isTaskCard(/* isHome= */ false, /* otherApp= */ true));
+    }
+
+    @Test public void homeAloneIsTheTaskCard() {
+        // a swipe over the home app itself
+        assertTrue(HgHomeGesturePolicy.isTaskCard(/* isHome= */ true, /* otherApp= */ false));
+    }
+
+    @Test public void appsAreAlwaysTaskCards() {
+        assertTrue(HgHomeGesturePolicy.isTaskCard(/* isHome= */ false, /* otherApp= */ false));
+    }
 }

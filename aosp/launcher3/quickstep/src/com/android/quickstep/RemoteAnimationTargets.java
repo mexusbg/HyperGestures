@@ -54,8 +54,17 @@ public class RemoteAnimationTargets {
         ArrayList<RemoteAnimationTarget> filteredApps = new ArrayList<>();
         boolean hasRecents = false;
         if (apps != null) {
+            // HyperGestures: the home task next to an app is no task card (isTaskCard); it stays
+            // in unfilteredApps, so TransformParams still applies its home builder proxy.
+            boolean hgOtherApp = false;
             for (RemoteAnimationTarget target : apps) {
-                if (target.mode == targetMode) {
+                hgOtherApp |= target.mode == targetMode
+                        && target.windowConfiguration.getActivityType() != ACTIVITY_TYPE_HOME;
+            }
+            for (RemoteAnimationTarget target : apps) {
+                if (target.mode == targetMode && HgHomeGesturePolicy.isTaskCard(
+                        target.windowConfiguration.getActivityType() == ACTIVITY_TYPE_HOME,
+                        hgOtherApp)) {
                     filteredApps.add(target);
                 }
 

@@ -163,4 +163,18 @@ public final class HgHomeGesturePolicy {
         }
         return aospWillFinishToHome;
     }
+
+    /**
+     * Whether a closing target of a swipe gets a task card (a TaskViewSimulator of its own). Behind
+     * a translucent app (Viber's chat screen) Shell sends the home task as a closing target next to
+     * the app; as a second card it was drawn full screen above recents (the home builder proxy of
+     * TransformParams left it visible), over the app's card. Only a swipe over the home app itself
+     * makes the home window the card.
+     *
+     * @param isHome the target is the home task
+     * @param otherApp another closing target is not the home task
+     */
+    public static boolean isTaskCard(boolean isHome, boolean otherApp) {
+        return !isHome || !otherApp;
+    }
 }
