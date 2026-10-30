@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- HyperGestures: the chevron of a settings row that opens a choice (HgPreferenceTheme). -->
-<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="24dp"
-    android:layout_height="24dp"
-    android:importantForAccessibility="no"
-    android:src="@drawable/hg_ic_settings_chevron"
-    android:tint="?android:attr/textColorSecondary" />

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HyperGestures: one tile of the recents layout picker (HgLayoutPickerPreference): the moving
+     miniature in a rounded ring (accent when picked, with a check), its name below. The whole
+     tile is the touch target. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="5dp"
+    android:layout_marginEnd="5dp"
+    android:layout_weight="1"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_horizontal"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:id="@+id/hg_layout_frame"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="5dp">
+
+        <com.android.quickstep.HgLayoutPreviewView
+            android:id="@+id/hg_layout_preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <ImageView
+            android:id="@+id/hg_layout_check"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="5dp"
+            android:layout_marginEnd="5dp"
+            android:background="@drawable/hg_layout_check_bg"
+            android:importantForAccessibility="no"
+            android:padding="3dp"
+            android:src="@drawable/hg_ic_layout_check"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/hg_layout_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:importantForAccessibility="no"
+        android:minHeight="24dp"
+        android:textAppearance="?attr/textAppearanceBodyMedium" />
+</LinearLayout>

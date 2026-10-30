@@ -49,13 +49,12 @@
     </style>
 
     <!-- The settings list's rows (HgSettingsFragment draws the cards behind them): our row
-         layouts (the slider's too), Material 3 switches and a chevron on the lists. -->
+         layouts (the slider's too), and Material 3 switches. -->
     <style name="HgPreferenceTheme" parent="PreferenceThemeOverlay">
         <item name="preferenceStyle">@style/HgPreference</item>
         <item name="seekBarPreferenceStyle">@style/HgSeekBarPreference</item>
         <item name="preferenceCategoryStyle">@style/HgPreferenceCategory</item>
         <item name="switchPreferenceCompatStyle">@style/HgSwitchPreference</item>
-        <item name="dialogPreferenceStyle">@style/HgDialogPreference</item>
     </style>
     <style name="HgPreference" parent="Preference.Material">
         <item name="android:layout">@layout/hg_pref_row</item>
@@ -69,9 +68,5 @@
     <style name="HgSwitchPreference" parent="Preference.SwitchPreferenceCompat.Material">
         <item name="android:layout">@layout/hg_pref_row</item>
         <item name="android:widgetLayout">@layout/hg_pref_switch</item>
-    </style>
-    <style name="HgDialogPreference" parent="Preference.DialogPreference.Material">
-        <item name="android:layout">@layout/hg_pref_row_value</item>
-        <item name="android:widgetLayout">@layout/hg_pref_chevron</item>
     </style>
 </resources>

@@ -23,7 +23,7 @@
 // Looks: a status card at the top (running, standing by or not running, with the note, the app's
 // version and the status list, HgStatusCard, read on the helper thread at each resume), then each
 // section's rows on one rounded card under a quiet header (HgSettingsCards; the rows' layouts and
-// switches are HgPreferenceTheme's), lists marked by a chevron and web links by an open mark.
+// switches are HgPreferenceTheme's), the layout picked from moving previews, web links marked by an open mark.
 package com.android.quickstep;
 
 import android.app.ActivityManager;
@@ -48,7 +48,6 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
@@ -820,33 +819,17 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
 
     /**
      * hypergestures_recents_layout: vertical ("0"), horizontal ("1") or stack ("2"), in
-     * MiuiHome's order. Unset is filled by HgSettingsMigration, so there is no follow choice;
-     * until then (no permission) the list shows the layout recents follows from HyperOS.
+     * MiuiHome's order, picked from three moving previews (HgLayoutPickerPreference). Unset is
+     * filled by HgSettingsMigration, so there is no follow choice; until then (no permission)
+     * the picker shows the layout recents follows from HyperOS.
      */
     private void addLayout(PreferenceGroup group) {
         Context ctx = group.getContext();
         ContentResolver cr = ctx.getContentResolver();
-        ListPreference p = new ListPreference(ctx);
-        // Its dialog fragment finds the preference by key (a null key crashed the page; owner,
-        // 2026-10-10). Not persisted: the value lives in Settings.Global.
-        p.setKey("hg_recents_layout");
-        p.setPersistent(false);
+        HgLayoutPickerPreference p = new HgLayoutPickerPreference(ctx, choice -> write(
+                () -> Settings.Global.putString(cr, HgRecentsSettings.RECENTS_LAYOUT, choice)));
         p.setTitle(R.string.hg_settings_layout);
-        p.setDialogTitle(R.string.hg_settings_layout);
-        p.setIconSpaceReserved(false);
-        p.setEntries(new CharSequence[] {getString(R.string.hg_settings_layout_vertical),
-                getString(R.string.hg_settings_layout_horizontal),
-                getString(R.string.hg_settings_layout_stack)});
-        p.setEntryValues(new CharSequence[] {"0", "1", "2"});
-        p.setOnPreferenceChangeListener((pref, value) -> {
-            String choice = (String) value;
-            if (!write(() -> Settings.Global.putString(cr, HgRecentsSettings.RECENTS_LAYOUT,
-                    choice))) {
-                return false;
-            }
-            p.setSummary(layoutSummary(choice));
-            return true;
-        });
+        p.setSummary(R.string.hg_settings_layout_summary);
         group.addPreference(p);
         mRefreshers.add(() -> {
             String choice;
@@ -860,16 +843,7 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
                 choice = "";
             }
             p.setValue(choice);
-            p.setSummary(layoutSummary(choice));
         });
-    }
-
-    private String layoutSummary(String choice) {
-        switch (choice) {
-            case "0": return getString(R.string.hg_settings_layout_vertical);
-            case "2": return getString(R.string.hg_settings_layout_stack);
-            default: return getString(R.string.hg_settings_layout_horizontal);
-        }
     }
 
     /**

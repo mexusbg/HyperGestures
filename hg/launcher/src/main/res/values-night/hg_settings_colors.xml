@@ -20,4 +20,11 @@
     <color name="hg_settings_on_primary">#FF161A55</color>
     <color name="hg_settings_primary_container">#FF2E3480</color>
     <color name="hg_settings_on_primary_container">#FFE0E3FF</color>
+    <!-- The layout picker's miniatures (HgLayoutPreviewView), and the unpicked tiles' ring -->
+    <color name="hg_preview_screen">#59000000</color>
+    <color name="hg_preview_card_base">#FF1E1C33</color>
+    <color name="hg_preview_card">#38FFFFFF</color>
+    <color name="hg_preview_card_stroke">#59FFFFFF</color>
+    <color name="hg_preview_header">#80FFFFFF</color>
+    <color name="hg_preview_ring">#24FFFFFF</color>
 </resources>

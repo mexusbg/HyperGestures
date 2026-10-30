@@ -21,6 +21,14 @@
     <color name="hg_settings_on_primary">#FFFFFFFF</color>
     <color name="hg_settings_primary_container">#FFDFE2FF</color>
     <color name="hg_settings_on_primary_container">#FF10165E</color>
+    <!-- The layout picker's miniatures (HgLayoutPreviewView): a dimmed screen, panes of
+         translucent white with a fine edge, header bars; the unpicked tiles' ring -->
+    <color name="hg_preview_screen">#14000000</color>
+    <color name="hg_preview_card_base">#FFE4E2EE</color>
+    <color name="hg_preview_card">#E6FFFFFF</color>
+    <color name="hg_preview_card_stroke">#26000000</color>
+    <color name="hg_preview_header">#40000000</color>
+    <color name="hg_preview_ring">#1F000000</color>
     <!-- The status card (both themes): white text on the accent's blue to violet, darkened. -->
     <color name="hg_status_on_start">#FF2E5596</color>
     <color name="hg_status_on_center">#FF3A3F9E</color>

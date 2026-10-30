@@ -78,6 +78,8 @@
 
     <!-- Recents layout: list title, and its three choices -->
     <string name="hg_settings_layout">Layout</string>
+    <!-- Under "Layout", above the three moving previews -->
+    <string name="hg_settings_layout_summary">How the cards sit when you open recents</string>
     <!-- HyperOS's vertical layout: two columns of cards, scrolling up and down -->
     <string name="hg_settings_layout_vertical">Vertical</string>
     <string name="hg_settings_layout_horizontal">Horizontal</string>
