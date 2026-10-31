@@ -3,7 +3,8 @@
  * Ported into HyperGestures as com.hypergestures.notif (switch: hypergestures_notification_icons).
  * Idea from howard20181's Notification Icon Fix (io.github.howard20181.notificationiconfix); no
  * code taken from it.
- * Copyright (C) 2026 mexus. Licensed under CC BY-NC-SA 4.0; see LICENSE and NOTICE.
+ * Copyright (C) 2026 mexus. Licensed under PolyForm Noncommercial 1.0.0; see LICENSE and
+ * NOTICE.
  */
 package com.hypergestures.notif;
 

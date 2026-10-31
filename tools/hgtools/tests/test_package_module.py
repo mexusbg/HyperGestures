@@ -58,6 +58,14 @@ class PackageModuleTest(unittest.TestCase):
         ]:
             self.assertIn(expected, names)
 
+    def test_license_files_ship_at_the_root(self):
+        # PolyForm Noncommercial: whoever gets a copy gets the terms and the Required Notice;
+        # Apache-2.0 4(a)/(d): the AOSP license and NOTICE travel with the APKs built from it.
+        z = self.build()
+        for name in package_module.LEGAL_FILES:
+            self.assertEqual(z.read(name), (package_module.ROOT / name).read_bytes(), name)
+        self.assertIn(b"Required Notice:", z.read("LICENSE"))
+
     def test_system_tree_and_no_payload(self):
         # The standard KernelSU system/ tree, for the phone's metamodule to mount (mixed mode, what
         # MOUNT=auto picks with an active metamodule); self mode stacks the same tree from

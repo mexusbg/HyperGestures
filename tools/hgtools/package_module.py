@@ -33,6 +33,10 @@ XPOSED_ENTRIES = ("META-INF/xposed/java_init.list", "assets/xposed_init")
 # and LSPosed would copy all of it into SystemUI and the AOD.
 NOTIF_DEX_MAX = 1024 * 1024
 ROOT = Path(__file__).resolve().parents[2]
+# The licenses and the NOTICE, at the zip's root: PolyForm Noncommercial asks that whoever gets a
+# copy also gets its terms and the "Required Notice" line (both in LICENSE); Apache-2.0 asks the
+# same for the AOSP code the APKs are built from (LICENSE-APACHE-2.0, NOTICE).
+LEGAL_FILES = ("LICENSE", "LICENSE-APACHE-2.0", "NOTICE")
 
 
 class PackagingError(Exception):
@@ -149,6 +153,11 @@ def build_zip(template_dir: Path, apk: Path, overlay_apk: Path, permissions: lis
     for name, xml in allowlists.items():
         files[name] = (xml.encode(), False)
     files["expected-fingerprint"] = ((fingerprint.strip() + "\n").encode(), False)
+    for name in LEGAL_FILES:
+        legal = ROOT / name
+        if not legal.is_file():
+            raise PackagingError(f"missing {legal}: the module must ship its licenses")
+        files[name] = (legal.read_bytes(), False)
 
     tmp = out_zip.with_suffix(".tmp")
     out_zip.parent.mkdir(parents=True, exist_ok=True)

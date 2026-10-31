@@ -9,10 +9,11 @@
 // Nothing is stored in the app, so adb and the page always agree; the values are read again
 // whenever the page resumes. Writes need WRITE_SECURE_SETTINGS (Global, Secure) and
 // WRITE_SETTINGS (System), both granted; a failed write leaves the switch as it was and toasts.
-// Plus Save logs (HgLogCollector), versions, the author, the license (CC
-// BY-NC-SA 4.0, a tap opens its deed) and a Ko-fi link (the browser; a toast without one). Sections: Recents and Gestures (ours, only while they
-// run), System (works with any home app: "Hide navigation line", the System launcher's; while
-// it is off "Long press navigation line" and "Hide navigation line (alternative)", our overlay;
+// Plus Save logs (HgLogCollector), versions, the author (a tap opens their GitHub page), the
+// license (PolyForm Noncommercial 1.0.0, a tap opens it) and a Ko-fi link (each in the browser; a
+// toast without one). Sections: Recents and Gestures (ours, only while they run), System (works
+// with any home app: "Hide navigation line", the System launcher's; "Circle to Search"; while it
+// is off "Hide navigation line (alternative)", our overlay;
 // "Fix notification icons", "Fix App info back": HgAppInfoTrampoline's component follows it),
 // Logs and About. Whether ours run is this boot's state as the module
 // publishes it (HgModuleStatus), read with the HOME holder whenever the page resumes, its opening
@@ -23,7 +24,8 @@
 // Looks: a status card at the top (running, standing by or not running, with the note, the app's
 // version and the status list, HgStatusCard, read on the helper thread at each resume), then each
 // section's rows on one rounded card under a quiet header (HgSettingsCards; the rows' layouts and
-// switches are HgPreferenceTheme's), the layout picked from moving previews, web links marked by an open mark.
+// switches are HgPreferenceTheme's), the layout picked from moving previews, web links marked by
+// an open mark.
 package com.android.quickstep;
 
 import android.app.ActivityManager;
@@ -195,8 +197,17 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
             Log.w(TAG, "own package info unreadable: " + e);
         }
         // Last in About, after the module version lines added later (explicit order).
-        addInfo(about, R.string.hg_settings_author, getString(R.string.hg_settings_author_name))
-                .setOrder(ABOUT_END_ORDER);
+        Preference author = new Preference(ctx);
+        author.setTitle(R.string.hg_settings_author);
+        author.setSummary(R.string.hg_settings_author_name);
+        author.setIconSpaceReserved(false);
+        author.setWidgetLayoutResource(R.layout.hg_pref_open);
+        author.setOrder(ABOUT_END_ORDER);
+        author.setOnPreferenceClickListener(p -> {
+            openLink(getString(R.string.hg_settings_author_url));
+            return true;
+        });
+        about.addPreference(author);
         Preference license = new Preference(ctx);
         license.setTitle(R.string.hg_settings_license);
         license.setSummary(R.string.hg_settings_license_name);

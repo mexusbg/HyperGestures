@@ -165,10 +165,11 @@ If HyperGestures is useful to you, you can support it at [ko-fi.com/mexus](https
 
 ## License
 
-HyperGestures is Copyright (c) 2026 mexus and licensed under
-[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) (full text in
-[LICENSE](LICENSE)). You may share and adapt it for non-commercial use, with attribution, under
-the same license. The vendored AOSP sources under `aosp/`, the libxposed API stubs and a few
+HyperGestures is Copyright (c) 2026 [mexus](https://github.com/mexusbg) and licensed under the
+[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
+(full text in [LICENSE](LICENSE)). You may use, share and change it for any noncommercial
+purpose; no commercial use. Whoever passes it on must pass on the license and its
+`Required Notice:` line. The vendored AOSP sources under `aosp/`, the libxposed API stubs and a few
 other files stay under the Apache License 2.0 ([LICENSE-APACHE-2.0](LICENSE-APACHE-2.0)).
 [NOTICE](NOTICE) lists which parts are under which license, and the credits.
 

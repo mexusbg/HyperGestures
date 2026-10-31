@@ -197,16 +197,18 @@
          is not running): the version an earlier boot ran, e.g. "0.3.9.38-alpha (50)" -->
     <string name="hg_settings_module_not_running">Not running this boot (last: %1$s)</string>
     <string name="hg_settings_author">Author</string>
-    <string name="hg_settings_author_name" translatable="false">mexus</string>
-    <!-- About: the project's license; a tap opens the license deed in the browser -->
+    <!-- About: the author; a tap opens the author's GitHub page in the browser -->
+    <string name="hg_settings_author_name" translatable="false">mexus · github.com/mexusbg</string>
+    <string name="hg_settings_author_url" translatable="false">https://github.com/mexusbg</string>
+    <!-- About: the project's license; a tap opens the license in the browser -->
     <string name="hg_settings_license">License</string>
-    <string name="hg_settings_license_name" translatable="false">CC BY-NC-SA 4.0</string>
-    <string name="hg_settings_license_url" translatable="false">https://creativecommons.org/licenses/by-nc-sa/4.0/</string>
+    <string name="hg_settings_license_name" translatable="false">PolyForm Noncommercial 1.0.0</string>
+    <string name="hg_settings_license_url" translatable="false">https://polyformproject.org/licenses/noncommercial/1.0.0</string>
     <!-- Opens the author's Ko-fi page in the browser -->
     <string name="hg_settings_kofi">Support on Ko-fi</string>
     <string name="hg_settings_kofi_summary" translatable="false">ko-fi.com/mexus</string>
     <string name="hg_settings_kofi_url" translatable="false">https://ko-fi.com/mexus</string>
-    <!-- Toast when no app can open the Ko-fi or license link -->
+    <!-- Toast when no app can open the author, Ko-fi or license link -->
     <string name="hg_settings_no_browser">No browser to open the link</string>
     <!-- About line when the module runs a newer version than this app: the system kept the
          previous app. Its summary: our versionCode and the module's, e.g. "49", "50" -->
