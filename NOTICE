@@ -40,7 +40,9 @@ under those terms keep them.)
                             of command output from the owner's phone, kept as test input
   flags/values/**           our records of the aconfig flag values (values taken from AOSP's
                             build/release and from the phone)
-  README.md, LICENSE header, NOTICE, build.gradle.kts, settings.gradle.kts, gradle.properties,
+  assets/**                 the README's screenshots and animation (of the app's own screens)
+  README.md, BUILDING.md, LICENSE header, NOTICE, build.gradle.kts, settings.gradle.kts,
+  gradle.properties,
   gradle/libs.versions.toml, version.properties, .github/**, .gitattributes, .gitignore
 
   Modifications to Apache-2.0 files. Every change we made to a vendored AOSP file is marked
@@ -109,7 +111,8 @@ under those terms keep them.)
   the unit tests only and is never packaged. None of them is stored in this repository; each
   stays under its own license.
 
-  The repository contains no fonts and no bitmap images outside aosp/.
+  The repository contains no fonts, and no bitmap images outside aosp/ but the screenshots in
+  assets/screenshots/ (see 1).
 
 
 3. Credits and sources of ideas (no code taken)

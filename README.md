@@ -4,73 +4,119 @@ Stock-feeling HyperOS gestures and recents with the launcher you choose.
 
 On HyperOS, full-screen gestures and the recents screen live inside MiuiHome, the system
 launcher. Set Nova (or any other launcher) as home and HyperOS takes the gestures away or gives
-you a broken recents screen. HyperGestures fixes that: it puts its own recents and gesture
-provider, built from AOSP Launcher3 (`android-17.0.0_r1`), where MiuiHome's used to be. Your
-launcher stays home; swipe up, quick switch, recents and back work and look like stock HyperOS.
+you a broken recents screen. HyperGestures fixes that: your launcher stays home, and swipe up,
+quick switch, recents and back work and look like stock HyperOS.
 
-> **Status: alpha.** It is in daily use on one phone (Xiaomi 17 Ultra, HyperOS 4.0). It needs
-> root and changes how SystemUI runs. Read [Safety and recovery](#safety-and-recovery) before
-> installing.
+> **Beta.** Tested on the **Xiaomi 17 Ultra** with **HyperOS 4.0, EEA (Europe) firmware**. It
+> may work on other HyperOS 4 phones and firmware too. If it doesn't, please
+> [open an issue](../../issues) and attach your logs (see
+> [Something not working?](#something-not-working)). It needs root and changes how SystemUI
+> runs: read [Safety and recovery](#safety-and-recovery) before installing.
+
+## Screenshots
+
+| Recents layout, picked from live tiles | Light mode |
+|---|---|
+| <img src="assets/screenshots/settings-layout-dark.png" width="270" alt="Settings: the Recents section with the three live layout tiles, dark mode"> | <img src="assets/screenshots/settings-layout-light.png" width="270" alt="Settings: the Recents section in light mode"> |
+
+| Gestures | Logs and About |
+|---|---|
+| <img src="assets/screenshots/settings-gestures-dark.png" width="270" alt="Settings: recents switches and the Gestures section"> | <img src="assets/screenshots/settings-logs-about-dark.png" width="270" alt="Settings: Save logs and About"> |
+
+<img src="assets/screenshots/layout-tiles.gif" width="540" alt="The three layout tiles moving: vertical grid, horizontal row and stack">
 
 ## Features
 
 - **Gestures with any launcher:** swipe up for home, swipe up and hold for recents, swipe along
-  the bottom to switch apps, edge swipes for back.
-- **HyperOS-style recents:** horizontal, vertical (two-column grid) or stacked cards, matching
-  MiuiHome's sizes and motion, with the memory line, clear-all, lock, split screen, floating
-  window and App info actions, and frosted-glass blur where the phone supports it.
-- **MIUI back arrow:** the HyperOS bulge and chevron and MiuiHome's rule for when a swipe counts
-  as back. Vibration follows the system touch-feedback setting.
-- **Corner gestures** with MiuiHome's hover animation (assistant, Circle to Search).
-- **System extras that work with any home app, MiuiHome included:**
-  - hide the gesture line;
-  - open App info the HyperOS way from every app, so Back from App permissions returns to App
-    info (switchable);
-  - a notification icon fix (an optional LSPosed module, `com.hypergestures.notif`).
-- **Stays out of the way:** while MiuiHome is home, the module goes dormant at the next boot and
+  the bottom to switch apps, swipe in from an edge for back.
+- **HyperOS recents, three layouts:** vertical (two-column grid), horizontal (one row) or
+  stack (a deck), with MiuiHome's sizes and motion and frosted-glass blur.
+- **Card actions as on HyperOS:** swipe a card up to close the app, pull it down to lock it,
+  hold it for Lock, Split screen, Floating window and App info, tap the trash button to clear
+  all (locked apps stay). MIUI's own vibrations for clearing and locking.
+- **Split screen and floating windows on the way up:** while swiping up from an app, drag it to
+  a top corner.
+- **MIUI back arrow:** the HyperOS bulge and chevron, MiuiHome's rule for when a swipe counts as
+  back, adjustable sensitivity for each edge.
+- **Extras that work with any home app, MiuiHome included:**
+  - hide the navigation line (the System launcher's own setting, or our alternative that keeps
+    swipes and Circle to Search working);
+  - Circle to Search on a long press of the navigation line, on or off;
+  - App info that keeps its place when you open App permissions, as on stock MIUI;
+  - real app icons in notifications instead of white squares (optional, needs LSPosed).
+- **A status card that tells you what runs:** module, mount, recents provider, gestures and
+  back, LSPosed hooks, and whether a reboot is pending.
+- **Stays out of the way:** while MiuiHome is home, HyperGestures stands by at the next boot and
   HyperOS runs as stock.
 - **Battery first:** no polling, nothing running while idle.
 
-Settings are in the HyperGestures app in your app list. The module's Action button in KernelSU
-prints a status summary.
-
 ## Requirements
 
-- **Phone:** Xiaomi 17 Ultra (`nezha`) on HyperOS 4.0 (Android 17). Each build is made for the
-  firmware it was built against (see `tools/framework-stub/device-build.txt`). On another
-  firmware build the module still sets up, posts a notification, and relies on the boot health
-  check: if gestures don't come up, it rolls back to stock. Set `STRICT_FIRMWARE=1` in the
-  module config to refuse other firmware outright.
+- **Phone:** tested on the Xiaomi 17 Ultra (`nezha`), HyperOS 4.0 EEA firmware (Android 17).
+  Other HyperOS 4 phones and firmware may work: on firmware it wasn't built for, the module
+  still sets up and tells you so, and if gestures don't come up at boot it rolls back to stock
+  on its own.
 - **Root:** KernelSU, with a module mount (a metamodule such as Hybrid Mount works).
 - **Home:** a third-party launcher set as the default home app.
-- **Optional:** LSPosed (libxposed API 102) for the notification icon fix. Enable
-  "HyperGestures notification icons" for System UI and AOD, then reboot.
+- **Optional:** LSPosed, for the notification icon fix.
 
 ## Install
 
-1. In HyperOS, keep the gesture line visible in the System launcher's settings. If it is hidden
-   there, Circle to Search stops working. To hide the line, use HyperGestures' own "Hide gesture
-   line" setting instead.
+1. In HyperOS, keep the navigation line visible in the System launcher's settings. To hide it,
+   use HyperGestures' own setting instead.
 2. Set your launcher as the default home app.
 3. Download `HyperGestures-<version>.zip` from [Releases](../../releases), install it in KernelSU
    and **reboot fully** (not a soft reboot).
+4. For the notification icon fix: in LSPosed, enable **HyperGestures notification icons** for
+   System UI and AOD, turn on **Fix notification icons** in HyperGestures' settings, and reboot.
 
-Updating works the same way: install the new zip over the old one, then reboot.
+To update, install the new zip over the old one and reboot.
+
+## How to use
+
+- **Settings:** open **HyperGestures** from your app list. The card at the top shows whether it
+  is running and what needs a reboot. Every switch applies at once unless it says otherwise.
+- **Recents layout:** tap the Vertical, Horizontal or Stack tile under Recents. The next time
+  you open recents, it uses that layout.
+- **In recents:**
+  - swipe a card up: close the app;
+  - pull a card down: lock or unlock it (locked apps survive Clear all);
+  - hold a card: Lock, Split screen, Floating window, App info;
+  - tap the trash button: clear all;
+  - turn on **Show memory** in settings for HyperOS's free-memory line under the cards.
+- **While swiping up from an app:** drag it to a top corner for split screen or a floating
+  window.
+- **Back:** swipe in from the left or right edge. Set each edge's sensitivity under Gestures,
+  and pick the MIUI or the Android arrow.
+- **Status in KernelSU:** the module's Action button prints a status summary.
 
 ## Switching home apps
 
 - **From the System launcher (MiuiHome) to another launcher:** reboot after the switch. While
-  MiuiHome is home, the module stays dormant and only turns on at the next boot.
-- **Between third-party launchers:** once the module is active, switch any time, no reboot
-  needed.
-- **Back to the System launcher:** the app tells you to reboot. After the reboot the module is
-  dormant and HyperOS runs its own gestures.
+  MiuiHome is home, HyperGestures stands by and turns on at the next boot.
+- **Between third-party launchers:** switch any time, no reboot needed.
+- **Back to the System launcher:** the app tells you to reboot. After the reboot HyperGestures
+  stands by and HyperOS runs its own gestures.
+
+## Something not working?
+
+Please [open an issue](../../issues) with:
+
+1. your phone model and HyperOS version (Settings, About phone, OS version, for example
+   `4.0.0.13.XPAEUXM`);
+2. the HyperGestures version (Settings, About);
+3. what you did, what you expected and what happened;
+4. **the logs:** in HyperGestures' settings, under Logs, tap **Save logs**. A zip appears in
+   Downloads; attach it to the issue. Saved logs name the apps you opened and can contain other
+   apps' messages, so look through them before posting publicly.
+
+A screen recording helps a lot for anything that looks or moves wrong.
 
 ## Safety and recovery
 
-The module checks itself at every boot. If the gesture provider doesn't come up, SystemUI crash
-loops, or boot doesn't complete three times in a row, it rolls back on its own: it gives home
-back to MiuiHome, restores the navigation mode and disables itself.
+HyperGestures checks itself at every boot. If the gesture provider doesn't come up, SystemUI
+crash loops, or boot doesn't complete three times in a row, it rolls back on its own: it gives
+home back to MiuiHome, restores the navigation mode and disables itself.
 
 To remove it cleanly:
 
@@ -83,81 +129,12 @@ module with `adb shell su -c touch /data/adb/modules/hypergestures/disable` and 
 safe mode also boots without the module.
 
 Before a firmware update (OTA), the safest route is to run `restore.sh` and disable the module,
-update, then install a build made for the new firmware. Small OTAs often keep working, but
-Xiaomi may change SystemUI internals the module depends on.
+update, then install a HyperGestures build for the new firmware. Small OTAs often keep working,
+but Xiaomi may change SystemUI internals HyperGestures depends on.
 
-## How it works
+## Building from source
 
-- **KernelSU module** (`module/template/`): mounts the app as a privileged system app, points
-  SystemUI's recents component at it through a resource overlay, switches the navigation mode,
-  and checks health at boot.
-- **App** `com.hypergestures` (`hg/`, `modules/launcher/`): an AOSP Launcher3 QuickStep fork
-  running without a home screen of its own. SystemUI binds its `TouchInteractionService`, as it
-  would MiuiHome's.
-- **Notification hooks** `com.hypergestures.notif` (`hg/notif/`, `modules/notif/`): a small,
-  separate LSPosed module APK.
-- **Overlay** (`overlay/`): a static resource overlay for SystemUI's recents component.
-
-The module and the app exchange state only through `Settings.Global`. Root never reads or
-writes the app's data folders.
-
-Every change to the vendored AOSP sources is marked with a `// HyperGestures:` comment that
-says why.
-
-## Building
-
-You need:
-
-- JDK 17+.
-- The Android SDK with platform `android-37.0` (set `sdk.dir` in `local.properties`).
-- Python 3.11+ as `python` (or set `HG_PYTHON`).
-- The device files in `prebuilts/device/`: `framework.jar` (a compile-only stub),
-  `framework-res.apk` and `framework-classes.txt`, made from the phone with
-  `tools/framework-stub/make-framework-stub.sh`, and the firmware's binder tables
-  `hyperos4-sysui-aidl-tables.txt` and `hyperos4-shell-aidl-tables.txt` (unit-test input). They
-  come from Xiaomi's firmware, so they are git-ignored and never committed.
-- A signing key. Local builds use `keystore/hypergestures.jks` (git-ignored; alias, store and
-  key password `hypergestures`). Create one with:
-
-  ```sh
-  keytool -genkeypair -keystore keystore/hypergestures.jks -alias hypergestures \
-    -keyalg RSA -keysize 2048 -validity 10000 -storepass hypergestures \
-    -keypass hypergestures -dname "CN=dev"
-  ```
-
-  Or point `HG_KEYSTORE`, `HG_KEYSTORE_PASSWORD`, `HG_KEY_ALIAS` and `HG_KEY_PASSWORD` at
-  another key.
-
-Then run:
-
-```sh
-bash tools/build-module.sh
-```
-
-The script builds the APKs and runs every check: unit tests, the module's shell test suite and
-the Python tool tests. It writes the module zip to `out/HyperGestures-<version>.zip`. On Windows
-it runs the shell suite in WSL when WSL is available, which takes seconds instead of most of an
-hour.
-
-## CI and releases
-
-GitHub Actions ([.github/workflows/build.yml](.github/workflows/build.yml)) builds and tests
-every push and pull request, signs the APKs with the release key, and uploads the module zip as
-a build artifact. The firmware files come from a separate private repository that CI reads with
-a deploy key.
-
-To publish a release:
-
-1. Bump `version` and `versionCode` in [version.properties](version.properties) and commit.
-2. Tag the commit `v<version>` and push the branch and the tag:
-
-   ```sh
-   git tag v0.4.0-beta
-   git push origin master v0.4.0-beta
-   ```
-
-CI checks that the tag matches `version.properties`, builds, and publishes a GitHub release with
-the module zip. Versions with `-alpha` or `-beta` are marked as pre-releases.
+See [BUILDING.md](BUILDING.md).
 
 ## Support
 
@@ -169,8 +146,8 @@ HyperGestures is Copyright (c) 2026 [mexus](https://github.com/mexusbg) and lice
 [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
 (full text in [LICENSE](LICENSE)). You may use, share and change it for any noncommercial
 purpose; no commercial use. Whoever passes it on must pass on the license and its
-`Required Notice:` line. The vendored AOSP sources under `aosp/`, the libxposed API stubs and a few
-other files stay under the Apache License 2.0 ([LICENSE-APACHE-2.0](LICENSE-APACHE-2.0)).
+`Required Notice:` line. The vendored AOSP sources under `aosp/`, the libxposed API stubs and a
+few other files stay under the Apache License 2.0 ([LICENSE-APACHE-2.0](LICENSE-APACHE-2.0)).
 [NOTICE](NOTICE) lists which parts are under which license, and the credits.
 
 Xiaomi, MIUI, HyperOS and MiuiHome are trademarks of Xiaomi. HyperGestures is not affiliated

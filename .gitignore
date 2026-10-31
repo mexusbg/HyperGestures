@@ -48,6 +48,8 @@ __pycache__/
 docs/logs/
 
 # Documentation, knowledge and research notes stay local: no Markdown in git except the README
+# and the build notes
 /docs/
 *.md
 !/README.md
+!/BUILDING.md
