@@ -2716,29 +2716,6 @@ public abstract class RecentsView<
         }
     }
 
-    /**
-     * HyperGestures: after a swipe up from an app, scrolls one card on, to the previous app, in
-     * the horizontal layout (HgRecentsLayout.centresPreviousOnOpen); true if it did.
-     */
-    private boolean hgCentrePrevious() {
-        TaskView running = getRunningTaskView();
-        if (running == null) return false;
-        java.util.List<com.android.systemui.shared.recents.model.Task> tasks =
-                new java.util.ArrayList<>();
-        for (TaskContainer container : running.getTaskContainers()) {
-            tasks.add(container.getTask());
-        }
-        boolean fromApp = !com.android.quickstep.HgClearAll.isHome(getContext(), tasks);
-        int page = indexOfChild(running) + 1;
-        boolean hasOlder = page < getChildCount() && getChildAt(page) instanceof TaskView;
-        if (!com.android.quickstep.HgRecentsLayout.centresPreviousOnOpen(
-                com.android.quickstep.HgRecentsLayout.style(), fromApp, hasOlder)) {
-            return false;
-        }
-        snapToPage(page);
-        return true;
-    }
-
     /** HyperGestures: whether the stack layout is shown (HgStackLayout). */
     public boolean isHgStack() {
         return mHgStack != null;
@@ -3324,7 +3301,6 @@ public abstract class RecentsView<
         mUtils.startAddDesktopButtonFadeInOnGestureComplete();
         animateActionsViewIn();
         // HyperGestures: a corner the gesture was released in runs its action on the card now.
-        boolean hgCornerAction = com.android.quickstep.HgCornerDrag.hasPending();
         com.android.quickstep.HgCornerDrag.onGestureAnimationEnd(this,
                 mCurrentGestureEndTarget == GestureState.GestureEndTarget.RECENTS);
 
@@ -3349,11 +3325,8 @@ public abstract class RecentsView<
             setCurrentTask(-1);
         }
 
-        // HyperGestures: recents settled after a swipe up from an app: on to the previous app as
-        // MiuiHome (its page end settles the stack), else the stack's deck at rest. Not when a
-        // corner action took the card.
-        if (mCurrentGestureEndTarget == GestureState.GestureEndTarget.RECENTS
-                && (hgCornerAction || !hgCentrePrevious())) {
+        // HyperGestures: recents settled after a swipe up: the stack's deck at rest.
+        if (mCurrentGestureEndTarget == GestureState.GestureEndTarget.RECENTS) {
             hgSettleStack("gesture end");
         }
         mCurrentGestureEndTarget = null;

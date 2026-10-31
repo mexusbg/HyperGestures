@@ -58,14 +58,4 @@ public class HgRecentsLayoutTest {
         assertEquals("1", HgRecentsLayout.pageChoice("junk", "1"));
         assertEquals("0", HgRecentsLayout.pageChoice("", null));
     }
-
-    /** The horizontal layout centres the previous app; the stack keeps the current one in front. */
-    @Test public void centresPreviousOnlyFromAnAppWithAnOlderCard() {
-        assertEquals(true, HgRecentsLayout.centresPreviousOnOpen(HORIZONTAL, true, true));
-        assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(STACK, true, true));
-        assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(
-                HgRecentsLayout.VERTICAL, true, true));
-        assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(HORIZONTAL, false, true));
-        assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(HORIZONTAL, true, false));
-    }
 }
