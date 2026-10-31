@@ -59,13 +59,13 @@ public class HgRecentsLayoutTest {
         assertEquals("0", HgRecentsLayout.pageChoice("", null));
     }
 
-    /** MiuiHome centres the previous app when opened from one, but not in the vertical grid. */
+    /** The horizontal layout centres the previous app; the stack keeps the current one in front. */
     @Test public void centresPreviousOnlyFromAnAppWithAnOlderCard() {
         assertEquals(true, HgRecentsLayout.centresPreviousOnOpen(HORIZONTAL, true, true));
-        assertEquals(true, HgRecentsLayout.centresPreviousOnOpen(STACK, true, true));
+        assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(STACK, true, true));
         assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(
                 HgRecentsLayout.VERTICAL, true, true));
-        assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(STACK, false, true));
+        assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(HORIZONTAL, false, true));
         assertEquals(false, HgRecentsLayout.centresPreviousOnOpen(HORIZONTAL, true, false));
     }
 }

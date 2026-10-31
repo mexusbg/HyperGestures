@@ -2718,7 +2718,7 @@ public abstract class RecentsView<
 
     /**
      * HyperGestures: after a swipe up from an app, scrolls one card on, to the previous app, in
-     * the horizontal and stack layouts (HgRecentsLayout.centresPreviousOnOpen); true if it did.
+     * the horizontal layout (HgRecentsLayout.centresPreviousOnOpen); true if it did.
      */
     private boolean hgCentrePrevious() {
         TaskView running = getRunningTaskView();

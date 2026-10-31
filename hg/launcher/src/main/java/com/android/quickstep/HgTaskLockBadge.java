@@ -1,10 +1,9 @@
 // HyperGestures: the lock badge on a locked recents card (HgTaskLockStore): Launcher3's ic_lock
-// on a small dark disc in the top-start corner of the card's thumbnail, added to the card's
-// TaskContentView (a ConstraintLayout holding the @id/snapshot thumbnail) on first use. The
-// start corner, not the end: in the stack the newer card covers a card's end side, and older
-// cards show only a strip on their start side, so a badge at the end could not be seen
-// (2026-10-31 review). Locking or unlocking a card (refresh) fades and scales the badge in or out
-// over ANIM_MS; binding a card shows it at once.
+// on a small dark disc in the top-end corner of the card's thumbnail, added to the card's
+// TaskContentView (a ConstraintLayout holding the @id/snapshot thumbnail) on first use. (The
+// top-start corner, tried in 0.3.9.53 so the stack would not cover it, did not show: owner.)
+// Locking or unlocking a card (refresh) fades and scales the badge in or out over ANIM_MS;
+// binding a card shows it at once.
 package com.android.quickstep;
 
 import android.animation.ValueAnimator;
@@ -76,9 +75,9 @@ public final class HgTaskLockBadge {
 
         ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(size, size);
         lp.topToTop = R.id.snapshot;
-        lp.startToStart = R.id.snapshot;
+        lp.endToEnd = R.id.snapshot;
         lp.topMargin = margin;
-        lp.setMarginStart(margin);
+        lp.setMarginEnd(margin);
         contentView.addView(badge, lp);
         show(badge, animate);
     }

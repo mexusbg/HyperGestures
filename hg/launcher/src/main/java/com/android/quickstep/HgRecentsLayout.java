@@ -106,14 +106,15 @@ public final class HgRecentsLayout {
 
     /**
      * Whether recents, opened by a swipe up from an app, moves on to the previous app: MiuiHome's
-     * getDefaultCenterTaskViewIndex() = 1 for the horizontal and the stack layouts (docs/research/
-     * 2026-10-09-miuihome-recents-features.md 6d, 6e: the previous app in the middle, the current
-     * one peeking in on the newer side), so switching back is one tap. Not in the vertical layout
-     * (it opens at the top of its grid), not from the home app ({@code fromApp} false), and only
-     * with an older card to move to ({@code hasOlder}).
+     * getDefaultCenterTaskViewIndex() = 1 for the horizontal layout (docs/research/
+     * 2026-10-09-miuihome-recents-features.md 6d: the previous app in the middle, the current one
+     * peeking in on the newer side), so switching back is one tap. Not in the stack: there the
+     * current app stays in front (owner, 0.3.9.53: "wrong app is centered"), as in the recording
+     * HgStackLayout copies; not in the vertical layout (it opens at the top of its grid), not from
+     * the home app ({@code fromApp} false), and only with an older card ({@code hasOlder}).
      */
     public static boolean centresPreviousOnOpen(int style, boolean fromApp, boolean hasOlder) {
-        return style != VERTICAL && fromApp && hasOlder;
+        return style == HORIZONTAL && fromApp && hasOlder;
     }
 
     /** The layout recents shows now: VERTICAL, HORIZONTAL or STACK. */
