@@ -40,7 +40,9 @@ under those terms keep them.)
                             of command output from the owner's phone, kept as test input
   flags/values/**           our records of the aconfig flag values (values taken from AOSP's
                             build/release and from the phone)
-  assets/**                 the README's screenshots and animation (of the app's own screens)
+  assets/**                 the README's screenshots, animations and demo video, recorded on the
+                            owner's phone and the emulator (other apps on screen belong to
+                            their owners; personal details blurred)
   README.md, BUILDING.md, LICENSE header, NOTICE, build.gradle.kts, settings.gradle.kts,
   gradle.properties,
   gradle/libs.versions.toml, version.properties, .github/**, .gitattributes, .gitignore

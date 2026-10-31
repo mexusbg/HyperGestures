@@ -13,7 +13,22 @@ quick switch, recents and back work and look like stock HyperOS.
 > [Something not working?](#something-not-working)). It needs root and changes how SystemUI
 > runs: read [Safety and recovery](#safety-and-recovery) before installing.
 
+## Demo
+
+<a href="assets/screenshots/demo.mp4"><img src="assets/screenshots/demo.webp" width="300" alt="Demo on a Xiaomi 17 Ultra: Nova as home, swipe up into recents, the stack, horizontal and vertical layouts, and the settings page"></a>
+
+A 33-second run on a Xiaomi 17 Ultra with Nova Launcher as home. Tap it for the
+[full-quality video](assets/screenshots/demo.mp4).
+
 ## Screenshots
+
+Recents on the phone, in each layout:
+
+| Stack | Horizontal | Vertical |
+|---|---|---|
+| <img src="assets/screenshots/recents-stack.png" width="240" alt="Recents in the stack layout: a deck of cards with the trash button and memory line"> | <img src="assets/screenshots/recents-horizontal.png" width="240" alt="Recents in the horizontal layout: one card in the middle, the next peeking in"> | <img src="assets/screenshots/recents-vertical.png" width="240" alt="Recents in the vertical layout: two columns of cards"> |
+
+The settings page:
 
 | Recents layout, picked from live tiles | Light mode |
 |---|---|
