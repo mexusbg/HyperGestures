@@ -85,7 +85,8 @@ The settings page:
 4. For the notification icon fix: in LSPosed, enable **HyperGestures notification icons** for
    System UI and AOD, turn on **Fix notification icons** in HyperGestures' settings, and reboot.
 
-To update, install the new zip over the old one and reboot.
+**Updates:** KernelSU shows when a new version is out (Modules, HyperGestures, Update), with the
+changelog. Install it and reboot. You can also install a newer zip over the old one by hand.
 
 ## How to use
 

@@ -63,7 +63,9 @@ a deploy key.
 
 To publish a release:
 
-1. Bump `version` and `versionCode` in [version.properties](version.properties) and commit.
+1. Bump `version` and `versionCode` in [version.properties](version.properties), add the
+   release's notes at the top of [CHANGELOG.md](CHANGELOG.md), and run
+   `python -m tools.hgtools.update_json` to write [update.json](update.json). Commit all three.
 2. Tag the commit `v<version>` and push the branch and the tag:
 
    ```sh
@@ -73,3 +75,9 @@ To publish a release:
 
 CI checks that the tag matches `version.properties`, builds, and publishes a GitHub release with
 the module zip. Versions with `-alpha` or `-beta` are marked as pre-releases.
+
+Installed modules find updates through module.prop's `updateJson`, which points at
+`update.json` on `master`: KernelSU offers the update when its `versionCode` is higher, and
+downloads the zip from the tagged release. Push the tag right after the commit, so the release
+exists by the time KernelSU follows the link. A unit test fails when `update.json` does not match
+`version.properties`.

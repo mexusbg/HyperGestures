@@ -49,9 +49,10 @@ docs/logs/
 # Drafts of release posts (Reddit, XDA): kept local only
 /posts/
 
-# Documentation, knowledge and research notes stay local: no Markdown in git except the README
-# and the build notes
+# Documentation, knowledge and research notes stay local: no Markdown in git except the README,
+# the build notes and the changelog
 /docs/
 *.md
 !/README.md
 !/BUILDING.md
+!/CHANGELOG.md

@@ -4,3 +4,4 @@ version=@VERSION@
 versionCode=@VERSION_CODE@
 author=mexus
 description=Gesture navigation for HyperOS without MiuiHome (QuickStep provider + overlay)
+updateJson=https://raw.githubusercontent.com/mexusbg/HyperGestures/master/update.json
