@@ -152,8 +152,8 @@ To publish a release:
 2. Tag the commit `v<version>` and push the branch and the tag:
 
    ```sh
-   git tag v0.3.9.47-alpha
-   git push origin master v0.3.9.47-alpha
+   git tag v0.4.0-beta
+   git push origin master v0.4.0-beta
    ```
 
 CI checks that the tag matches `version.properties`, builds, and publishes a GitHub release with

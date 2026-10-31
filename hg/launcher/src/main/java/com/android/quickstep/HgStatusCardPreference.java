@@ -43,7 +43,7 @@ final class HgStatusCardPreference extends Preference {
         setSelectable(false);
     }
 
-    /** The pill's text ("v0.3.9.51-alpha"); null hides it. */
+    /** The pill's text ("v0.4.0-beta"); null hides it. */
     void setVersion(String version) {
         mVersion = version;
         notifyChanged();
