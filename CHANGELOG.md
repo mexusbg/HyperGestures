@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.1-beta
+
+Install in KernelSU, then reboot fully.
+
+- **Works after HyperOS updates:** HyperGestures reads HyperOS's split-screen code from the phone
+  itself instead of being tied to one HyperOS version. On OS4.0.0.13 this fixes the split card
+  when you swipe up from a split pair, and splits started from recents can be resized again. If a
+  later update ever changes something, only that feature falls back, and the status card shows a
+  "Firmware compatibility" row saying which. The "New HyperOS version" notification is gone.
+- **Hold buttons:** they sit right next to the card, and other cards slide out of their way. In the
+  stack the first card's buttons are on the right and every other card's on the left; in the
+  horizontal and grid layouts they open on the side where no other card is.
+- **Notification icons:** apps that post several different icons show each one correctly, a
+  work-profile app keeps its badge, icons follow app updates, and they use less memory.
+- **Recents:** locking a split card from its menu locks both apps; header taps and the hold menu
+  stay consistent after you change the header setting; the cleared toast always goes away.
+- **Back:** no vibration or arrow animation when a back is not sent; the back area follows a
+  Display size change.
+- **Module:** "Restore" right after boot is no longer undone by the module's own setup; the
+  battery setting is put back reliably; fewer checks at boot.
+- **Security:** the screenshot share provider only shares recents screenshots; an unused
+  permission and an unused exported component are gone.
+- **Settings:** tapping a module notice opens settings, and the page starts faster.
+
 ## 0.4.0-beta
 
 The first beta. Install in KernelSU, then reboot fully.
