@@ -56,8 +56,18 @@ constructor(
 ) : TaskThumbnailDataSource {
     val highResLoadingState = HighResLoadingState()
     // HyperGestures: the last screenshot of each task, for cards the system has none for
-    // (HgLastThumbnails).
+    // (HgLastThumbnails); only those taken in split are held (hgRemember).
     private val hgLast = HgLastThumbnails<ThumbnailData>(cache.maxSize)
+
+    /**
+     * HyperGestures: [hgLast] takes the screenshot: held only if taken in split, the one case the
+     * fallback (hgTaskThumbnail) shows it; any other just drops the task's held one.
+     */
+    private fun hgRemember(taskId: Int, data: ThumbnailData?) {
+        val inSplit =
+            data?.windowingMode == android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW
+        hgLast.remember(taskId, data, inSplit)
+    }
     private val enableTaskSnapshotPreloading =
         context.resources.getBoolean(R.bool.config_enableTaskSnapshotPreloading)
 
@@ -105,18 +115,18 @@ constructor(
     private fun hgTaskThumbnail(key: Task.TaskKey, lowResolution: Boolean): ThumbnailData {
         val data = activityManagerWrapper.getTaskThumbnail(key.id, lowResolution)
         if (data.thumbnail != null) {
-            hgLast.remember(key.id, data)
+            hgRemember(key.id, data)
             return data
         }
         val anyResolution = hgAnyResolutionThumbnail(key.id)
         if (anyResolution.thumbnail != null) {
-            hgLast.remember(key.id, anyResolution)
+            hgRemember(key.id, anyResolution)
             return anyResolution
         }
         if (key.windowingMode == android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM) {
             val taken = activityManagerWrapper.takeTaskThumbnail(key.id, lowResolution)
             Log.d(TAG, "floating task ${key.id}: snapshot taken=${taken.thumbnail != null}")
-            hgLast.remember(key.id, taken.takeIf { it.thumbnail != null })
+            hgRemember(key.id, taken.takeIf { it.thumbnail != null })
             return taken
         }
         val last = hgLast.lastOf(key.id) ?: return data
@@ -142,7 +152,7 @@ constructor(
     fun updateTaskSnapShot(taskId: Int, thumbnail: ThumbnailData?) {
         Preconditions.assertUIThread()
         cache.updateIfAlreadyInCache(taskId, thumbnail)
-        if (thumbnail?.thumbnail != null) hgLast.remember(taskId, thumbnail) // HyperGestures
+        if (thumbnail?.thumbnail != null) hgRemember(taskId, thumbnail) // HyperGestures
     }
 
     /**

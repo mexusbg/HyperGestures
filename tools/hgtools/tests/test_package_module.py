@@ -9,7 +9,7 @@ from tools.hgtools.package_module import PackagingError
 
 ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE = ROOT / "module" / "template"
-FP = "Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.11.XPAEUXM:user/release-keys"
+FP = "Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.13.XPAEUXM:user/release-keys"
 NOTIF_APK = "system/priv-app/HyperGesturesNotif/HyperGesturesNotif.apk"
 NOTIF_XML = "system/etc/permissions/privapp-permissions-com.hypergestures.notif.xml"
 NOTIF_ENTRIES = ["AndroidManifest.xml", "classes.dex", "META-INF/xposed/java_init.list",
@@ -190,6 +190,25 @@ class PackageModuleTest(unittest.TestCase):
             package_module.privapp.render_xml = original
         self.assertFalse(self.out.exists())
 
+    def test_package_refuses_an_allowlist_the_framework_would_not_read(self):
+        # The check parses what the zip ships: a permission named only in a comment, or in a
+        # malformed file, is not granted.
+        original = package_module.privapp.render_xml
+        perms = ["android.permission.MONITOR_INPUT", "android.permission.STATUS_BAR_SERVICE"]
+        for broken in (
+                lambda pkg, ps: original(pkg, ps[:-1]).replace(
+                    "<permissions>", f'<permissions><!-- <permission name="{ps[-1]}" /> -->')
+                if ps else original(pkg, ps),
+                lambda pkg, ps: original(pkg, ps).replace("</permissions>", "")):
+            package_module.privapp.render_xml = broken
+            try:
+                with self.assertRaises(PackagingError):
+                    self.build(perms)
+            finally:
+                package_module.privapp.render_xml = original
+            self.assertFalse(self.out.exists())
+            self.assertFalse(self.out.with_suffix(".tmp").exists())
+
     def test_expected_fingerprint_is_packaged(self):
         z = self.build()
         self.assertEqual(z.read("expected-fingerprint").decode(), FP + "\n")
@@ -204,9 +223,10 @@ class PackageModuleTest(unittest.TestCase):
 
     def test_device_build_stamp_is_read(self):
         stamp = self.tmp / "device-build.txt"
-        stamp.write_text(f"# comment\nfingerprint={FP}\nframework.jar.sha256=ab\n")
+        stamp.write_text(f"# comment\nfingerprint={FP}\nframework.jar.sha256=ab\n",
+                         encoding="utf-8")
         self.assertEqual(package_module.read_fingerprint(stamp), FP)
-        stamp.write_text("# no fingerprint line\nframework.jar.sha256=ab\n")
+        stamp.write_text("# no fingerprint line\nframework.jar.sha256=ab\n", encoding="utf-8")
         with self.assertRaises(PackagingError):
             package_module.read_fingerprint(stamp)
 

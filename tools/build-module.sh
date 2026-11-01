@@ -26,7 +26,12 @@ run_shell_suite() {
   if [ "${HG_WSL:-1}" != 0 ] && [ -n "$win" ] && command -v wsl.exe >/dev/null 2>&1 \
      && wsl.exe -d "$distro" -- true >/dev/null 2>&1; then
     drive="$(printf '%s' "$win" | cut -c1 | tr 'A-Z' 'a-z')"
-    wsl.exe -d "$distro" -- sh -c "cd '/mnt/$drive${win#?:}' && sh tests/module/test_functions.sh"
+    # The path goes in as an argument of its own (sh's $1), never inside the script: a quote in it
+    # can't break the command. --exec hands wsl.exe's arguments over as they are (`--` would have
+    # the distro's shell parse them again), and MSYS_NO_PATHCONV keeps Git Bash from rewriting the
+    # /mnt path as a Windows one.
+    MSYS_NO_PATHCONV=1 wsl.exe -d "$distro" --exec \
+      sh -c 'cd "$1" && sh tests/module/test_functions.sh' sh "/mnt/$drive${win#?:}"
   else
     sh tests/module/test_functions.sh
   fi

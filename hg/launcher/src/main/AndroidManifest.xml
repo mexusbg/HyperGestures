@@ -15,8 +15,9 @@
        personal-context service; app code only calls its static listener registry),
        NotificationListener (notification dots on home icons; it would also be listed under
        Notification access), the androidx app-function services (their app_functions.xml is not even
-       packaged), and SessionCommitReceiver / AppWidgetsRestoredReceiver (add installed apps and
-       restored widgets to the home workspace);
+       packaged), SessionCommitReceiver / AppWidgetsRestoredReceiver (add installed apps and
+       restored widgets to the home workspace) and LauncherCustomizationProvider (the exported grid
+       and icon-shape previews the wallpaper picker asks the home app for);
      - backup: no backup agent, allowBackup="false", no fullBackupContent (a full-backup teardown or
        restore would kill the gesture service).
      Added: the settings page (HgSettingsActivity, MAIN/LAUNCHER), Save logs' permissions, a
@@ -98,6 +99,9 @@
             tools:node="remove" />
         <receiver
             android:name="com.android.launcher3.AppWidgetsRestoredReceiver"
+            tools:node="remove" />
+        <provider
+            android:name="com.android.launcher3.graphics.LauncherCustomizationProvider"
             tools:node="remove" />
 
         <!-- The settings page (HgSettingsActivity), the app's icon in the home app. Its label and

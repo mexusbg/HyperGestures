@@ -14,9 +14,9 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.widget.ImageView;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -45,13 +45,41 @@ final class AodIcons {
     /** Opaque coverage of the glyph layer above which it would swallow the plate. */
     private static final float BLOCK_COVERAGE = 0.80f;
 
-    /** Package of the icon currently being bound, set by the bind hook just before the setter. */
-    private static final ThreadLocal<String> BINDING = new ThreadLocal<>();
+    /**
+     * The icon currently being bound, set by the bind hook just before the setter: its package,
+     * and what the setter already did with it.
+     */
+    private static final ThreadLocal<Bind> BINDING = new ThreadLocal<>();
+
+    /** HyperGestures: view classes already hooked, so a second loader never hooks one twice. */
+    private static final java.util.Set<Class<?>> HOOKED = java.util.Collections.newSetFromMap(
+            new java.util.WeakHashMap<>());
+
+    /** HyperGestures: getNotificationDatas() per AOD view class; one lookup each. */
+    private static final ConcurrentHashMap<Class<?>, Method> DATAS = new ConcurrentHashMap<>();
+
+    /** Stands for "no such method" in {@link #DATAS}, which cannot hold null. */
+    private static final Method NO_METHOD = noMethod();
+
+    /** One icon bind. */
+    private static final class Bind {
+        final String pkg;
+        /** The drawable the setter measured and passed on, or null if it did not run. */
+        Drawable checked;
+
+        Bind(String pkg) {
+            this.pkg = pkg;
+        }
+    }
 
     private AodIcons() {
     }
 
-    static void install(ClassLoader loader, boolean circle) throws Throwable {
+    /**
+     * HyperGestures: returns how many methods were hooked, 0 when this loader has none or they
+     * are hooked already. Never throws: the caller's own hooks stand either way.
+     */
+    static int install(ClassLoader loader, boolean circle) {
         int hooked = 0;
         for (String name : new String[] {
             "com.miui.aod.AODView",
@@ -64,12 +92,19 @@ final class AodIcons {
                 Logger.v("AOD view " + name + " unavailable: " + t);
                 continue;
             }
-            hooked += hookBind(c, circle);
-            hooked += hookSetter(c, circle);
+            synchronized (HOOKED) {
+                if (!HOOKED.add(c)) {
+                    continue;
+                }
+            }
+            try {
+                hooked += hookBind(c, circle);
+                hooked += hookSetter(c, circle);
+            } catch (Throwable t) {
+                Logger.e("AOD view " + name + " not hooked", t);
+            }
         }
-        if (hooked == 0) {
-            throw new IllegalStateException("no AOD icon methods found");
-        }
+        return hooked;
     }
 
     /**
@@ -94,14 +129,15 @@ final class AodIcons {
                     return chain.proceed();
                 }
                 // The setter hook below fires inside proceed() and reads BINDING for the package.
-                BINDING.set(packageAt(chain.getThisObject(), chain.getArg(1)));
+                Bind bind = new Bind(packageAt(chain.getThisObject(), chain.getArg(1)));
+                BINDING.set(bind);
                 try {
                     Object result = chain.proceed();
                     try {
                         // Correct the view directly: whether MIUI routes through
                         // setNotificationIconDrawable or calls setImageDrawable itself, by this
                         // point the icon is on the view and can be measured for real.
-                        fixBoundView(chain.getArg(0), BINDING.get(), circle);
+                        fixBoundView(chain.getArg(0), bind, circle);
                     } catch (Throwable t) {
                         Logger.e("AOD bound icon fix failed", t);
                     }
@@ -116,19 +152,24 @@ final class AodIcons {
         return hooked;
     }
 
-    private static void fixBoundView(Object viewObj, String pkg, boolean circle) {
+    private static void fixBoundView(Object viewObj, Bind bind, boolean circle) {
         if (!(viewObj instanceof ImageView)) {
             return;
         }
         ImageView view = (ImageView) viewObj;
         Drawable current = view.getDrawable();
-        if (current == null) {
+        // HyperGestures: what the setter already measured (and replaced if needed) is not
+        // rendered and measured a second time.
+        if (current == null || current == bind.checked) {
             return;
         }
+        String pkg = bind.pkg;
         float glyph = glyphCoverage(current);
         if (glyph < BLOCK_COVERAGE) {
-            Logger.v("aodIcon(" + pkg + "): bound " + current.getClass().getSimpleName()
-                    + " glyph coverage=" + Math.round(glyph * 100) + "%, leaving it alone");
+            if (Logger.VERBOSE) {
+                Logger.v("aodIcon(" + pkg + "): bound " + current.getClass().getSimpleName()
+                        + " glyph coverage=" + Math.round(glyph * 100) + "%, leaving it alone");
+            }
             return;
         }
         if (pkg == null) {
@@ -141,8 +182,10 @@ final class AodIcons {
         }
         view.setImageDrawable(masked);
         // HyperGestures: verbose, as it runs per AOD icon bind.
-        Logger.v("aodIcon(" + pkg + "): bound glyph was a " + Math.round(glyph * 100)
-                + "% solid block -> replaced with the app icon");
+        if (Logger.VERBOSE) {
+            Logger.v("aodIcon(" + pkg + "): bound glyph was a " + Math.round(glyph * 100)
+                    + "% solid block -> replaced with the app icon");
+        }
     }
 
     private static int hookSetter(Class<?> c, boolean circle) {
@@ -177,11 +220,17 @@ final class AodIcons {
             return;
         }
         Drawable composed = (Drawable) args[1];
-        String pkg = BINDING.get();
+        Bind bind = BINDING.get();
+        String pkg = bind == null ? null : bind.pkg;
+        if (bind != null) {
+            bind.checked = composed;
+        }
         float glyph = glyphCoverage(composed);
         if (glyph < BLOCK_COVERAGE) {
-            Logger.v("aodIcon(" + pkg + "): " + composed.getClass().getSimpleName()
-                    + " glyph coverage=" + Math.round(glyph * 100) + "%, leaving it alone");
+            if (Logger.VERBOSE) {
+                Logger.v("aodIcon(" + pkg + "): " + composed.getClass().getSimpleName()
+                        + " glyph coverage=" + Math.round(glyph * 100) + "%, leaving it alone");
+            }
             return;
         }
         if (pkg == null) {
@@ -194,8 +243,12 @@ final class AodIcons {
             return;
         }
         args[1] = masked;
-        Logger.i("aodIcon(" + pkg + "): glyph was a " + Math.round(glyph * 100)
-                + "% solid block that would cover MIUI's plate -> using the app icon instead");
+        bind.checked = masked;
+        // HyperGestures: verbose, as it runs per AOD icon bind.
+        if (Logger.VERBOSE) {
+            Logger.v("aodIcon(" + pkg + "): glyph was a " + Math.round(glyph * 100)
+                    + "% solid block that would cover MIUI's plate -> using the app icon instead");
+        }
     }
 
     /**
@@ -228,7 +281,10 @@ final class AodIcons {
             return null;
         }
         try {
-            Method get = aodView.getClass().getMethod("getNotificationDatas");
+            Method get = DATAS.computeIfAbsent(aodView.getClass(), AodIcons::datasMethod);
+            if (get == NO_METHOD) {
+                return null;
+            }
             Object list = get.invoke(aodView);
             if (!(list instanceof List)) {
                 return null;
@@ -238,20 +294,27 @@ final class AodIcons {
             if (i < 0 || i >= datas.size()) {
                 return null;
             }
-            Object data = datas.get(i);
-            for (Class<?> c = data.getClass(); c != null; c = c.getSuperclass()) {
-                try {
-                    Field f = c.getDeclaredField("mPackageName");
-                    f.setAccessible(true);
-                    Object v = f.get(data);
-                    return v instanceof String ? (String) v : null;
-                } catch (NoSuchFieldException e) {
-                    // keep walking
-                }
-            }
+            return Hidden.readField(datas.get(i), "mPackageName", String.class);
         } catch (Throwable t) {
             Logger.v("could not read the AOD notification package: " + t);
         }
         return null;
+    }
+
+    private static Method datasMethod(Class<?> c) {
+        try {
+            return c.getMethod("getNotificationDatas");
+        } catch (Throwable t) {
+            Logger.v("AOD view " + c.getName() + " has no getNotificationDatas: " + t);
+            return NO_METHOD;
+        }
+    }
+
+    private static Method noMethod() {
+        try {
+            return Object.class.getMethod("hashCode");
+        } catch (NoSuchMethodException e) {
+            throw new AssertionError(e);
+        }
     }
 }

@@ -69,7 +69,11 @@
 # Extra, only when it happens:
 #   - the first HG_GESTURAL_WATCH s of the watchdog: `settings get secure navigation_mode` (the
 #     gestural revert watch; 2 forks, 1 exec) per round, and `cmd overlay list` | awk | grep
-#     (about 4 forks, 1 exec) only when that is not 2;
+#     (about 4 forks, 1 exec) only when that is not 2; and, at most every HG_POWER_EARLY s of
+#     watchdog time (not every 15 or 30 s round), the No-restrictions check (hg_power_retry: one
+#     `content query`, an app_process VM of about 0.3 s CPU; a write only when HyperOS reset it);
+#   - later, that check rides on the bind checks below, plus every HG_POWER_RETRY s while
+#     power-pending exists, HG_POWER_TRIES times a boot (hg_power_due);
 #   - log.txt changed since the app's copy was made, at most every HG_MIRROR_ROUNDS rounds: a
 #     tail into $HG_DATA and one `su <app uid>` (hg_mirror_sync);
 #   - a new crash entry of any tag: one read of its header (builtin; a .gz entry: zcat | awk);
@@ -84,9 +88,13 @@
 # forks and a /data write each: about 180 execs and 1200 forks an hour). Only if $HG_DROPBOX can't
 # be listed does the crash watch fall back to the 4 dropbox dumps per round (logged once a boot).
 # The health check (HG_HEALTH_WINDOW s after setup, every HG_HEALTH_TICK s) still checks the bind
-# (hg_provider_bound) at each tick; its crash checks are the same free scan. A dormant boot's
-# watchdog does only the marker tests, the roles.xml `-nt` test and hg_mirror_sync's mark tests
-# per round.
+# (hg_provider_bound) at each tick; its crash checks are the same free scan; the No-restrictions
+# check (`content query`) runs at a tick only while power-pending exists, and once at the end. A
+# dormant boot's watchdog does only the marker tests, the roles.xml `-nt` test and
+# hg_mirror_sync's mark tests per round (and, while a battery restore failed, hg_power_restore's
+# retries, HG_POWER_TRIES at most).
+# Every device command of the watchdog and the undo paths runs under hg_timeout (10 s), so a
+# wedged system service can stall neither.
 : "${HG_CMD_DUMPSYS:=dumpsys}"
 : "${HG_CMD_SETTINGS:=settings}"
 : "${HG_CMD_OVERLAY:=cmd overlay}"
@@ -156,6 +164,7 @@ HG_BIND_RECHECK=1800 # s of watchdog time between bind checks while neither pid 
 HG_GESTURAL_WATCH=600 # s after the watchdog starts during which every tick checks for a gestural revert
 HG_POWER_RETRY=480   # s of watchdog time between No-restrictions retries while power-pending exists
 HG_POWER_TRIES=12    # such retries per boot; after that only the bind checks retry (hg_power_due)
+HG_POWER_EARLY=120   # s of watchdog time between No-restrictions checks in the first minutes
 HG_LOG_MAX=262144    # bytes: a bigger log.txt is moved to log.old.txt at boot (hg_rotate_log)
 HG_MIRROR_ROUNDS=5   # watchdog rounds between copies of a changed log for the app (hg_mirror_sync)
 : "${HG_MIRROR_TIMEOUT:=10}" # s one log copy as the app's uid may take (hg_timeout_k; tests shorten it)
@@ -269,25 +278,39 @@ hg_mirror_job() {
   echo "$_hg_mjr" > "$HG_DATA/mirror-rc.tmp" && mv -f "$HG_DATA/mirror-rc.tmp" "$HG_DATA/mirror-rc"
 } 2>/dev/null
 
-# 0 if process $1 runs: /proc/$1/stat is there and its state is not Z (a job of ours that ended
-# stays a zombie until this shell reaps it, and `kill -0` would still find it). Builtins only.
-hg_job_running() {
+# HG_JSTAT = the fields of /proc/$1/stat after the command name (state, ppid, ...), HG_JSTART =
+# its start time (field 22: clock ticks after boot, which tells a reused pid from the process
+# first seen). 1 if there is no such process. Builtins only.
+hg_job_stat() {
+  HG_JSTAT=""; HG_JSTART=""
   [ -r "/proc/$1/stat" ] || return 1
-  IFS= read -r _hg_jst < "/proc/$1/stat" 2>/dev/null || return 1
-  _hg_jst="${_hg_jst##*) }"
-  case "$_hg_jst" in Z*|X*|'') return 1 ;; esac
+  IFS= read -r HG_JSTAT < "/proc/$1/stat" 2>/dev/null || return 1
+  HG_JSTAT="${HG_JSTAT##*) }"
+  set -- $HG_JSTAT
+  [ "$#" -ge 20 ] && shift 19 && HG_JSTART="$1"
   return 0
 }
 
+# 0 if process $1 runs: /proc/$1/stat is there and its state is not Z (a job of ours that ended
+# stays a zombie until this shell reaps it, and `kill -0` would still find it), and, given $2, it
+# started at that time (hg_job_stat: the pid was not reused by another process). Builtins only.
+hg_job_running() {
+  hg_job_stat "$1" || return 1
+  case "$HG_JSTAT" in Z*|X*|'') return 1 ;; esac
+  [ -z "${2:-}" ] || [ "$HG_JSTART" = "$2" ]
+}
+
 # 0 if no copy is in flight (the last one's result, mirror-rc, taken in: 0 or 3 fine, 4 or any
-# other failure turns copying off for this process, logged once); 1 while one runs (its pid in
-# mirror-pid, hg_job_running) or copying is off. A job gone without a result was killed: off too.
+# other failure turns copying off for this process, logged once); 1 while one runs (its pid and
+# start time in mirror-pid, hg_job_running) or copying is off. A job gone without a result was
+# killed: off too. A result there means the job has ended, whatever process has its pid now.
 # Builtins only (a `wait` for a job of this shell that has ended returns at once).
 hg_mirror_reap() {
   [ -f "$HG_DATA/mirror-pid" ] || return 0
-  IFS= read -r _hg_mpid < "$HG_DATA/mirror-pid"
+  _hg_mpid=""; _hg_mpst=""
+  read -r _hg_mpid _hg_mpst < "$HG_DATA/mirror-pid"
   case "$_hg_mpid" in ''|*[!0-9]*) rm -f "$HG_DATA/mirror-pid"; return 0 ;; esac
-  hg_job_running "$_hg_mpid" && return 1
+  [ -f "$HG_DATA/mirror-rc" ] || ! hg_job_running "$_hg_mpid" "$_hg_mpst" || return 1
   wait "$_hg_mpid" 2>/dev/null # reaps it if it is ours
   _hg_mrc=""
   [ -f "$HG_DATA/mirror-rc" ] && IFS= read -r _hg_mrc < "$HG_DATA/mirror-rc"
@@ -331,7 +354,8 @@ hg_mirror_sync() {
   fi
   rm -f "$HG_DATA/mirror-rc"
   (hg_mirror_job "$_hg_app_uid") </dev/null >/dev/null 2>&1 &
-  echo "$!" > "$HG_DATA/mirror-pid"
+  _hg_mjp="$!"; hg_job_stat "$_hg_mjp" # not reaped yet, so its stat is there even if it ended
+  echo "$_hg_mjp $HG_JSTART" > "$HG_DATA/mirror-pid"
   return 0
 }
 
@@ -689,7 +713,8 @@ hg_recorded() {
 # The navbar overlays `cmd overlay list` shows as enabled ([x]), one per line. Tolerates extra
 # spaces and a trailing CR (stripped, so the printed names are exact).
 hg_enabled_navbar_overlays() {
-  $HG_CMD_OVERLAY list 2>/dev/null | awk -v p="$HG_NAVBAR_PREFIX." '{ sub(/\r$/, "") } $1 == "[x]" && index($2, p) == 1 { print $2 }'
+  hg_timeout $HG_CMD_OVERLAY list 2>/dev/null | awk -v p="$HG_NAVBAR_PREFIX." \
+    '{ sub(/\r$/, "") } $1 == "[x]" && index($2, p) == 1 { print $2 }'
 }
 
 # Settings.Secure navigation_mode as SystemUI's NavigationModeController writes it from the navbar
@@ -713,7 +738,7 @@ hg_gesture_nav_active() {
   for _hg_o in $(hg_enabled_navbar_overlays); do
     case "$_hg_o" in "$HG_NAVBAR_PREFIX.gestural"*) return 0 ;; esac
   done
-  [ "$($HG_CMD_SETTINGS get global force_fsg_nav_bar 2>/dev/null)" = 1 ]
+  [ "$(hg_timeout $HG_CMD_SETTINGS get global force_fsg_nav_bar 2>/dev/null)" = 1 ]
 }
 
 # Navbar overlay back to the recorded original. With none recorded as enabled (HyperOS may enable
@@ -723,14 +748,14 @@ hg_gesture_nav_active() {
 hg_restore_navbar_overlay() {
   _hg_navbar="$(hg_recorded NAVBAR)"
   if [ -n "$_hg_navbar" ]; then
-    $HG_CMD_OVERLAY enable-exclusive --category "$_hg_navbar"
+    hg_timeout $HG_CMD_OVERLAY enable-exclusive --category "$_hg_navbar"
     return
   fi
   _hg_nrc=0
-  $HG_CMD_OVERLAY disable "$HG_NAVBAR_PREFIX.gestural" || _hg_nrc=1
+  hg_timeout $HG_CMD_OVERLAY disable "$HG_NAVBAR_PREFIX.gestural" || _hg_nrc=1
   for _hg_o in $(hg_enabled_navbar_overlays); do
     [ "$_hg_o" = "$HG_NAVBAR_PREFIX.gestural" ] && continue
-    $HG_CMD_OVERLAY disable "$_hg_o" || _hg_nrc=1
+    hg_timeout $HG_CMD_OVERLAY disable "$_hg_o" || _hg_nrc=1
   done
   return $_hg_nrc
 }
@@ -740,16 +765,18 @@ hg_apply_nav_mode() {
   _hg_nm=0
   case "$1" in
     gestural)
-      $HG_CMD_OVERLAY enable-exclusive --category "$HG_NAVBAR_PREFIX.gestural" || _hg_nm=1
+      hg_timeout $HG_CMD_OVERLAY enable-exclusive --category "$HG_NAVBAR_PREFIX.gestural" ||
+        _hg_nm=1
       _hg_nmd="gestural" ;;
     threebutton)
-      $HG_CMD_SETTINGS put global force_fsg_nav_bar 0 || _hg_nm=1
-      $HG_CMD_OVERLAY enable-exclusive --category "$HG_NAVBAR_PREFIX.threebutton" || _hg_nm=1
+      hg_timeout $HG_CMD_SETTINGS put global force_fsg_nav_bar 0 || _hg_nm=1
+      hg_timeout $HG_CMD_OVERLAY enable-exclusive --category "$HG_NAVBAR_PREFIX.threebutton" ||
+        _hg_nm=1
       _hg_nmd="threebutton" ;;
     fsg)
       # Xiaomi fsg sits on the base navbar: first drop a gestural overlay an earlier boot left.
       hg_restore_navbar_overlay || _hg_nm=1
-      $HG_CMD_SETTINGS put global force_fsg_nav_bar 1 || _hg_nm=1
+      hg_timeout $HG_CMD_SETTINGS put global force_fsg_nav_bar 1 || _hg_nm=1
       _hg_nmd="fsg (needs shim to stick with a third-party home)" ;;
     keep|"") hg_log "nav mode: unchanged"; return 0 ;;
     *) hg_log "nav mode: unknown '$1', unchanged"; return 0 ;;
@@ -761,10 +788,10 @@ hg_apply_nav_mode() {
 hg_record_nav_state() {
   [ -f "$HG_DATA/original-nav.txt" ] && return 0
   mkdir -p "$HG_DATA"
-  fsg="$($HG_CMD_SETTINGS get global force_fsg_nav_bar 2>/dev/null)"
-  navbar="$(hg_enabled_navbar_overlays | head -n 1)"
-  printf 'FSG=%s\nNAVBAR=%s\n' "$fsg" "$navbar" > "$HG_DATA/original-nav.txt"
-  hg_log "recorded original nav state: FSG=$fsg NAVBAR=$navbar"
+  _hg_rnf="$(hg_timeout $HG_CMD_SETTINGS get global force_fsg_nav_bar 2>/dev/null)"
+  _hg_rnn="$(hg_enabled_navbar_overlays | head -n 1)"
+  printf 'FSG=%s\nNAVBAR=%s\n' "$_hg_rnf" "$_hg_rnn" > "$HG_DATA/original-nav.txt"
+  hg_log "recorded original nav state: FSG=$_hg_rnf NAVBAR=$_hg_rnn"
 }
 
 # 0 if navbar overlay $1 draws nothing to navigate with on its own: not a button layout
@@ -795,7 +822,7 @@ hg_restore_nav_state() {
     _hg_fsg=1
   fi
   case "$_hg_fsg" in
-    0|1) $HG_CMD_SETTINGS put global force_fsg_nav_bar "$_hg_fsg" || _hg_rc=1 ;;
+    0|1) hg_timeout $HG_CMD_SETTINGS put global force_fsg_nav_bar "$_hg_fsg" || _hg_rc=1 ;;
   esac
   hg_log "restored nav state: FSG=$_hg_fsg NAVBAR=$(hg_recorded NAVBAR) (rc=$_hg_rc)"
   return $_hg_rc
@@ -805,11 +832,11 @@ hg_restore_nav_state() {
 # drawn (force_fsg_nav_bar not 1 and the enabled navbar overlay needs it, hg_navbar_needs_fsg),
 # turns HyperOS's full-screen gestures on. Repairs a phone an earlier version restored that way.
 hg_ensure_visible_nav() {
-  _hg_ev_fsg="$($HG_CMD_SETTINGS get global force_fsg_nav_bar 2>/dev/null)"
+  _hg_ev_fsg="$(hg_timeout $HG_CMD_SETTINGS get global force_fsg_nav_bar 2>/dev/null)"
   [ "$_hg_ev_fsg" = 1 ] && return 0
   _hg_ev_nav="$(hg_enabled_navbar_overlays | head -n 1)"
   hg_navbar_needs_fsg "$_hg_ev_nav" || return 0
-  if $HG_CMD_SETTINGS put global force_fsg_nav_bar 1; then
+  if hg_timeout $HG_CMD_SETTINGS put global force_fsg_nav_bar 1; then
     hg_log "dormant: navigation drew nothing (FSG=${_hg_ev_fsg:-unset}, $_hg_ev_nav); HyperOS gestures turned on (FSG=1)"
     return 0
   fi
@@ -818,12 +845,17 @@ hg_ensure_visible_nav() {
 }
 
 # HyperOS refuses `pm disable-user` for MiuiHome ("Cannot disable miui core packages"), so it is
-# denied background running and stopped instead. Never while it is the home app: that kills home.
+# denied background running and stopped instead. Never while it is the home app: that kills home,
+# nor when `cmd role` can't say who is (hg_home_role failed or timed out).
 hg_disable_miuihome() {
-  if $HG_CMD_ROLE get-role-holders android.app.role.HOME 2>/dev/null | grep -q '^com\.miui\.home$'; then
+  if ! _hg_dmh="$(hg_home_role)"; then
+    hg_log "MiuiHome: cmd role did not answer who is HOME: left running"; return 0
+  fi
+  if [ "$_hg_dmh" = "$HG_MIUIHOME" ]; then
     hg_log "MiuiHome is the home app: left running"; return 0
   fi
-  if $HG_CMD_APPOPS set com.miui.home RUN_ANY_IN_BACKGROUND ignore && $HG_CMD_AM force-stop com.miui.home; then
+  if hg_timeout $HG_CMD_APPOPS set com.miui.home RUN_ANY_IN_BACKGROUND ignore &&
+     hg_timeout $HG_CMD_AM force-stop com.miui.home; then
     hg_log "MiuiHome stopped and denied background running"; return 0
   fi
   hg_log "MiuiHome stop FAILED"
@@ -833,8 +865,8 @@ hg_disable_miuihome() {
 # Resets the background restriction, and enables MiuiHome in case a module version that still
 # used `pm disable-user` disabled it (a no-op on an enabled package).
 hg_enable_miuihome() {
-  $HG_CMD_APPOPS set com.miui.home RUN_ANY_IN_BACKGROUND default >/dev/null 2>&1
-  if $HG_CMD_PM enable com.miui.home; then hg_log "MiuiHome enabled"; return 0; fi
+  hg_timeout $HG_CMD_APPOPS set com.miui.home RUN_ANY_IN_BACKGROUND default >/dev/null 2>&1
+  if hg_timeout $HG_CMD_PM enable com.miui.home; then hg_log "MiuiHome enabled"; return 0; fi
   hg_log "MiuiHome enable FAILED"
   return 1
 }
@@ -858,7 +890,7 @@ hg_restore_setup() {
   _hg_set_rc=0
   hg_enable_miuihome || _hg_set_rc=1
   hg_restore_nav_state || _hg_set_rc=1
-  hg_power_restore
+  hg_power_restore || : # its record stays for a retry (hg_dormant_boot) or the next restore
   return $_hg_set_rc
 }
 
@@ -879,7 +911,7 @@ hg_restore_setup() {
 # and refuses one it does not know (exit 1), so no `cmd overlay list` (whose format we would
 # parse) is needed. Best effort: always 0; a refused disable is logged.
 hg_hide_line_off() {
-  if $HG_CMD_OVERLAY disable "$HG_HIDE_LINE" >/dev/null 2>&1; then
+  if hg_timeout $HG_CMD_OVERLAY disable "$HG_HIDE_LINE" >/dev/null 2>&1; then
     hg_log "gesture line: the app's hiding overlay disabled or already off (visible from SystemUI's next start)"
   else
     hg_log "gesture line: disabling the app's hiding overlay $HG_HIDE_LINE refused (not registered, or OMS said no)"
@@ -901,7 +933,7 @@ HG_PK_URI=content://com.miui.powerkeeper.configure/userTable
 # HG_BGC = our app's bgControl for user 0 ("" if PowerKeeper has no row, or can't be read).
 hg_power_get() {
   HG_BGC=""
-  _hg_pq="$($HG_CMD_CONTENT query --uri "$HG_PK_URI" --projection bgControl \
+  _hg_pq="$(hg_timeout $HG_CMD_CONTENT query --uri "$HG_PK_URI" --projection bgControl \
     --where "pkgName='$HG_PKG' AND userId=0" 2>/dev/null)"
   case "$_hg_pq" in
     *bgControl=*) HG_BGC="${_hg_pq#*bgControl=}"; HG_BGC="${HG_BGC%%[!A-Za-z]*}" ;;
@@ -911,12 +943,12 @@ hg_power_get() {
 # Sets our app's bgControl for user 0 to $1. Tries update first (the row usually exists), then
 # insert. 1 if it could not be set (read back).
 hg_power_set() {
-  $HG_CMD_CONTENT update --uri "$HG_PK_URI" --bind "bgControl:s:$1" \
+  hg_timeout $HG_CMD_CONTENT update --uri "$HG_PK_URI" --bind "bgControl:s:$1" \
     --where "pkgName='$HG_PKG' AND userId=0" >/dev/null 2>&1
   hg_power_get
   if [ "$HG_BGC" = "$1" ]; then return 0; fi
-  $HG_CMD_CONTENT insert --uri "$HG_PK_URI" --bind userId:i:0 --bind "pkgName:s:$HG_PKG" \
-    --bind "bgControl:s:$1" >/dev/null 2>&1
+  hg_timeout $HG_CMD_CONTENT insert --uri "$HG_PK_URI" --bind userId:i:0 \
+    --bind "pkgName:s:$HG_PKG" --bind "bgControl:s:$1" >/dev/null 2>&1
   hg_power_get
   [ "$HG_BGC" = "$1" ]
 }
@@ -946,8 +978,8 @@ hg_power_exempt() {
     return 0
   fi
   if [ ! -f "$HG_DATA/original-bgcontrol" ]; then
-    if [ -z "$HG_BGC" ] && ! $HG_CMD_CONTENT query --uri "$HG_PK_URI" --projection _id \
-         --where "userId=0" 2>/dev/null | grep -q '^Row:'; then
+    if [ -z "$HG_BGC" ] && ! hg_timeout $HG_CMD_CONTENT query --uri "$HG_PK_URI" \
+         --projection _id --where "userId=0" 2>/dev/null | grep -q '^Row:'; then
       hg_power_mark 1
       hg_log_once "battery: PowerKeeper's app list can't be read yet; will retry. HyperOS may freeze $HG_PKG briefly after screen-on"
       return 1
@@ -965,10 +997,11 @@ hg_power_exempt() {
   return 1
 }
 
-# Re-applies No restrictions when needed. The health check calls this every tick; the watchdog
-# when hg_power_due says so. Not gated on pending alone: HyperOS can reset the row after unlock
-# (phone log 2026-10-05 13:38, ChangedNoRestrictAppsList wipe). Each call runs `content`, an
-# app_process VM (about 0.3 s of CPU), so the watchdog spaces them out.
+# Re-applies No restrictions when needed. The health check calls this at a tick while
+# power-pending exists, and once at its end; the watchdog when hg_power_due says so. Not gated on
+# pending alone there: HyperOS can reset the row after unlock (phone log 2026-10-05 13:38,
+# ChangedNoRestrictAppsList wipe). Each call runs `content`, an app_process VM (about 0.3 s of
+# CPU), so both space them out.
 hg_power_retry() {
   hg_power_get
   if [ "$HG_BGC" = noRestrict ]; then
@@ -978,14 +1011,18 @@ hg_power_retry() {
   hg_power_exempt
 }
 
-# 0 if this watchdog round retries No restrictions ($1 = 1 on a bind-check round). Every round for
-# the first HG_GESTURAL_WATCH s (covers the first unlock); then at every bind check (a SystemUI or
-# our restart, a miss, and every HG_BIND_RECHECK s: catches a later reset by HyperOS for about two
-# VM starts an hour); and while power-pending exists, every HG_POWER_RETRY s of watchdog time,
+# 0 if this watchdog round retries No restrictions ($1 = 1 on a bind-check round). For the first
+# HG_GESTURAL_WATCH s (covers the first unlock) every HG_POWER_EARLY s of watchdog time since the
+# last retry (_hg_pw_at; the health check's last one just ran, so not at the first round), not at
+# every 15 or 30 s round after a crash or a miss; then at every bind check (a SystemUI or our
+# restart, a miss, and every HG_BIND_RECHECK s: catches a later reset by HyperOS for about two VM
+# starts an hour); and while power-pending exists, every HG_POWER_RETRY s of watchdog time,
 # HG_POWER_TRIES times a boot (a PowerKeeper that never answers, e.g. after an OTA, costs nothing
 # more than the bind checks). Builtins only.
 hg_power_due() {
-  [ "${_hg_wd_elapsed:-0}" -lt "$HG_GESTURAL_WATCH" ] && return 0
+  if [ "${_hg_wd_elapsed:-0}" -lt "$HG_GESTURAL_WATCH" ]; then
+    [ $(( ${_hg_wd_elapsed:-0} - ${_hg_pw_at:-0} )) -ge "$HG_POWER_EARLY" ]; return
+  fi
   [ "${1:-0}" = 1 ] && return 0
   [ -f "$HG_DATA/power-pending" ] || return 1
   [ "${_hg_pw_tries:-0}" -lt "$HG_POWER_TRIES" ] || return 1
@@ -995,7 +1032,9 @@ hg_power_due() {
 }
 
 # Puts our app's recorded original bgControl back (none: PowerKeeper's default, miuiAuto), then
-# forgets it. Best effort: logs a failure, keeps the record for the next restore, returns 0.
+# forgets it. Best effort for the undo paths (hg_restore_setup never fails on it): logs a failure
+# and keeps the record for the next restore, returning 1 then, so a caller that marks its restore
+# done (hg_dormant_boot) retries it while the record exists. 0 when restored or nothing recorded.
 hg_power_restore() {
   [ -f "$HG_DATA/original-bgcontrol" ] || return 0
   _hg_po="$(cat "$HG_DATA/original-bgcontrol" 2>/dev/null)"
@@ -1003,16 +1042,17 @@ hg_power_restore() {
   if hg_power_set "$_hg_po"; then
     rm -f "$HG_DATA/original-bgcontrol"; hg_power_mark 0
     hg_log "battery: $HG_PKG back to $_hg_po"
-  else
-    hg_log "battery: putting $HG_PKG back to $_hg_po FAILED (kept for the next restore)"
+    return 0
   fi
-  return 0
+  hg_log "battery: putting $HG_PKG back to $_hg_po FAILED (kept for the next restore)"
+  return 1
 }
 
 # HOME back to MiuiHome (the owner set a third-party launcher to use the module; spec D-15). A
 # no-op when it already is. Needs system services, i.e. boot completed.
 hg_restore_home() {
-  if $HG_CMD_ROLE add-role-holder android.app.role.HOME com.miui.home >/dev/null 2>&1; then
+  if hg_timeout $HG_CMD_ROLE add-role-holder android.app.role.HOME com.miui.home \
+      >/dev/null 2>&1; then
     hg_log "HOME set to com.miui.home"; return 0
   fi
   hg_log "HOME -> com.miui.home FAILED"
@@ -1151,11 +1191,13 @@ hg_install_guard() { # $1 = module dir
 hg_notify() {
   _hg_ntag="${2:-hypergestures}"
   hg_notify_app "$1" "$_hg_ntag" && return 0
-  $HG_CMD_NOTIFY -S bigtext -t HyperGestures "$_hg_ntag" "$1" >/dev/null 2>&1 && return 0
+  hg_timeout $HG_CMD_NOTIFY -S bigtext -t HyperGestures "$_hg_ntag" "$1" >/dev/null 2>&1 &&
+    return 0
   if command -v $HG_CMD_SU >/dev/null 2>&1; then
     # The text goes into a single-quoted word of the -c string: each ' becomes '\''.
     _hg_q="$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
-    $HG_CMD_SU 2000 -c "$HG_CMD_NOTIFY -S bigtext -t HyperGestures $_hg_ntag '$_hg_q'" >/dev/null 2>&1
+    hg_timeout $HG_CMD_SU 2000 -c "$HG_CMD_NOTIFY -S bigtext -t HyperGestures $_hg_ntag '$_hg_q'" \
+      >/dev/null 2>&1
   fi
   return 0
 }
@@ -1174,19 +1216,14 @@ hg_notify_app() {
 # Our app may post notifications (runtime permission POST_NOTIFICATIONS, which a priv-app is not
 # granted by default). Once per boot from service.sh; fails quietly (e.g. the app not mounted).
 hg_grant_notifications() {
-  $HG_CMD_PM grant "$HG_PKG" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
+  hg_timeout $HG_CMD_PM grant "$HG_PKG" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 ||
+    true
 }
 
 # The HyperOS build the module was made for ($1 = module dir; its expected-fingerprint, from
 # tools/framework-stub/device-build.txt), and the one this phone runs.
 hg_expected_fingerprint() { tr -d '\r\n' 2>/dev/null < "$1/expected-fingerprint"; }
 hg_phone_fingerprint() { $HG_CMD_GETPROP ro.build.fingerprint 2>/dev/null; }
-# The phone's HyperOS version as Settings shows it (OS4.0.0.13: the fingerprint's incremental
-# without its region code), or the whole fingerprint if it has another shape.
-hg_phone_os_version() {
-  hg_phone_fingerprint | sed 's|^[^/]*/[^/]*/[^/]*/[^/]*/\([^:/]*\):.*|\1|; s|^\(OS[0-9.]*[0-9]\)\.[A-Z][A-Z0-9]*$|\1|'
-}
-
 # Why this phone's build is not the one the module was made for; prints nothing if it is ($1 =
 # module dir). The APK's hidden-API calls, inlined device resource values and AIDL transaction
 # tables come from the build in expected-fingerprint; on any other build they may be wrong. By
@@ -1312,6 +1349,10 @@ hg_reapply_gestural() {
     hg_apply_nav_mode gestural >/dev/null 2>&1
     echo $(( _hg_re + 1 )) > "$HG_DATA/gestural-reapplies"
     hg_log "watchdog: gestural was reverted (by SystemUI?), re-applied"
+    if [ -f "$HG_DATA/restored" ]; then # restore.sh began meanwhile: its navigation wins
+      hg_restore_nav_state >/dev/null 2>&1
+      hg_log "watchdog: restore.sh ran meanwhile; the recorded navigation put back again"
+    fi
   elif [ "$_hg_re" = 3 ]; then
     echo 4 > "$HG_DATA/gestural-reapplies"
     hg_log "watchdog: gestural reverted 3 times this boot, leaving navigation as it is"
@@ -1434,7 +1475,7 @@ hg_ksu_heal() {
   fi
   hg_ksu_keep_mounts || return 1
   _hg_wd_heals=$(( ${_hg_wd_heals:-0} + 1 ))
-  $HG_CMD_AM force-stop "$HG_PKG" >/dev/null 2>&1
+  hg_timeout $HG_CMD_AM force-stop "$HG_PKG" >/dev/null 2>&1
   hg_crash_reset
   _hg_wd_opid=""
   hg_log "watchdog: the KernelSU profile of $HG_PKG had been reset (it would not see its APK); restored it and restarted $HG_PKG"
@@ -1624,8 +1665,11 @@ hg_home_react() {
 # (hg_restore_setup): MiuiHome's background restriction and the recorded navigation (a gesture
 # mode is fine: MiuiHome is SystemUI's provider again, our overlay is not mounted). Unlike
 # restore.sh it leaves the app's gesture-line overlay to the app's setting, which works with any
-# HOME. Later dormant boots leave the owner's settings alone. With WATCHDOG=1 the watchdog then
-# only watches HOME.
+# HOME. Later dormant boots leave the owner's settings alone. Our app's battery setting is the
+# exception: hg_power_restore keeps its record (original-bgcontrol) when PowerKeeper did not take
+# the original back (it may not run yet at boot_completed), and while that record exists every
+# dormant boot tries again, and so does its watchdog (hg_dormant_loop). With WATCHDOG=1 the
+# watchdog then only watches HOME (and that retry).
 hg_dormant_boot() {
   hg_log "dormant boot: HOME is $HG_MIUIHOME, so nothing is set up (stock HyperOS gestures and recents)"
   if [ ! -f "$HG_DATA/dormant-restored" ]; then
@@ -1634,7 +1678,11 @@ hg_dormant_boot() {
     else
       hg_log "dormant: restoring MiuiHome or the navigation FAILED; tried again at the next dormant boot"
     fi
+  elif [ -f "$HG_DATA/original-bgcontrol" ]; then
+    hg_power_restore # an earlier dormant boot could not put it back
   fi
+  [ -f "$HG_DATA/original-bgcontrol" ] && hg_log "dormant: our app's battery setting is not back" \
+    "yet; retried by the dormant watchdog and at the next dormant boot"
   hg_ensure_visible_nav
   hg_health_status dormant "not run: dormant: HOME is $HG_MIUIHOME (choose another launcher and reboot to use the module)"
   [ "${WATCHDOG:-1}" = 1 ] || return 0
@@ -1642,12 +1690,22 @@ hg_dormant_boot() {
   hg_dormant_loop "$1"
 }
 
-# The dormant boot's watchdog: every 120 s, the idle markers and hg_home_watch (builtins only).
+# The dormant boot's watchdog: every 120 s, the idle markers and hg_home_watch (builtins only);
+# from the second round on, while our app's battery setting is not back (original-bgcontrol,
+# hg_dormant_boot), one hg_power_restore a round, HG_POWER_TRIES at most.
 hg_dormant_loop() {
+  _hg_dpt=0; _hg_dround=0
   while :; do
     hg_watchdog_idle "$1" && return 0
     hg_mirror_sync
     hg_home_watch
+    if [ "$_hg_dround" = 1 ] && [ -f "$HG_DATA/original-bgcontrol" ] &&
+       [ "$_hg_dpt" -lt "$HG_POWER_TRIES" ]; then
+      _hg_dpt=$(( _hg_dpt + 1 ))
+      hg_power_restore || [ "$_hg_dpt" -lt "$HG_POWER_TRIES" ] || hg_log "dormant: battery" \
+        "setting still not back after $HG_POWER_TRIES retries; tried again at the next dormant boot"
+    fi
+    _hg_dround=1
     sleep 120
   done
 }
@@ -1920,11 +1978,13 @@ hg_monitor_in_dump() {
     END { if (found) exit 0; if (NR == 0 || unknown) exit 2; exit 1 }'
 }
 
-# The end-of-window checks; prints why and returns 1 if one fails. The monitor is only checked in
-# gestural mode: in 3-button, fsg or keep mode Launcher3 registers none.
+# The end-of-window checks; 1 if one fails, HG_FINAL_WHY saying why. Run in the caller's shell
+# (never in $(...)), so the once-a-process cross-checks (_hg_xb, _hg_xm) stay done. The monitor is
+# only checked in gestural mode: in 3-button, fsg or keep mode Launcher3 registers none.
 hg_health_final() {
+  HG_FINAL_WHY=""
   if ! hg_provider_bound; then
-    echo "provider not bound at the end of the health window"; return 1
+    HG_FINAL_WHY="provider not bound at the end of the health window"; return 1
   fi
   hg_gestural_on || return 0
   hg_monitor_registered
@@ -1933,7 +1993,7 @@ hg_health_final() {
     2) hg_log_once "health: can't tell whether the gesture monitor is ours (no dumpsys input, no pidof, or no ownerPid); that check passes"
        return 0 ;;
   esac
-  echo "gesture monitor not registered (no [Gesture Monitor] swipe-up owned by $HG_PKG)"
+  HG_FINAL_WHY="gesture monitor not registered (no [Gesture Monitor] swipe-up owned by $HG_PKG)"
   return 1
 }
 
@@ -1944,6 +2004,20 @@ hg_health_status() {
   HG_STATE="$1"; shift; HG_HEALTH="$*"
   mkdir -p "$HG_DATA" && echo "$* ($(date '+%F %T'))" > "$HG_DATA/health-status"
   hg_publish_status
+}
+
+# 0 if restore.sh ran this boot (marker restored, which it leaves before it restores anything):
+# the owner asked for stock, so setup and the health check ($1, for the log) stop there, never
+# re-applying what it undid. Puts our app's battery setting back once more, in case a retry of
+# ours ran alongside restore.sh's restore and recorded its value as the original (a no-op without
+# a record). Logged, and health-status says so. 1 (a builtin test) otherwise.
+hg_restored_stop() {
+  [ -f "$HG_DATA/restored" ] || return 1
+  hg_power_restore >/dev/null 2>&1 || :
+  hg_log "$1: restore.sh ran this boot; nothing more is set up or checked until the next boot"
+  hg_health_status not-set-up "not run: restore.sh ran this boot ($1 stopped there); stock" \
+    "until the next boot"
+  return 0
 }
 
 # This boot reached boot_completed: not a boot loop (hg_boot_guard). $1 = why, for the log.
@@ -1962,7 +2036,10 @@ hg_boot_finished() {
 # window the provider must be bound and, in gestural mode, our swipe-up gesture monitor
 # registered; if not, all of that is checked once more HG_HEALTH_TICK s later. Healthy: 0,
 # health-status "ok". Otherwise hg_rollback and 1. HEALTH_TEST=fail in the config forces one
-# failure and removes itself from the config.
+# failure and removes itself from the config. restore.sh run meanwhile (marker restored) ends it
+# at the next tick, with 2 (hg_restored_stop): nothing more is checked or re-applied. The
+# No-restrictions check (hg_power_retry, a VM each) runs at a tick only while power-pending
+# exists, and once at the end of the window.
 hg_health_check() {
   hg_health_status active "running (checks for $HG_HEALTH_WINDOW s after setup)"
   if [ "${HEALTH_TEST:-}" = fail ]; then
@@ -1978,7 +2055,11 @@ hg_health_check() {
   while [ "$_hg_ticks" -gt 0 ]; do
     sleep "$HG_HEALTH_TICK"
     _hg_ticks=$(( _hg_ticks - 1 ))
-    hg_power_retry >/dev/null 2>&1
+    hg_restored_stop "health check" && return 2
+    if [ -f "$HG_DATA/power-pending" ]; then
+      hg_power_retry >/dev/null 2>&1
+      hg_restored_stop "health check" && return 2 # restore.sh began during that retry
+    fi
     if hg_crash_scan "since setup"; then
       hg_rollback "$HG_CRASH_WHY" "$1"; return 1
     fi
@@ -1993,15 +2074,18 @@ hg_health_check() {
     fi
     if [ -n "$_hg_end" ] && _hg_t="$(hg_uptime)" && [ "$_hg_t" -ge "$_hg_end" ]; then break; fi
   done
+  hg_restored_stop "health check" && return 2
   hg_power_retry >/dev/null 2>&1
-  if ! _hg_why="$(hg_health_final)"; then
-    hg_log "health check: $_hg_why; checking once more in $HG_HEALTH_TICK s"
+  hg_restored_stop "health check" && return 2
+  if ! hg_health_final; then
+    hg_log "health check: $HG_FINAL_WHY; checking once more in $HG_HEALTH_TICK s"
     sleep "$HG_HEALTH_TICK"
+    hg_restored_stop "health check" && return 2
     if hg_crash_scan "since setup"; then
       hg_rollback "$HG_CRASH_WHY" "$1"; return 1
     fi
-    if ! _hg_why="$(hg_health_final)"; then
-      hg_rollback "$_hg_why" "$1"; return 1
+    if ! hg_health_final; then
+      hg_rollback "$HG_FINAL_WHY" "$1"; return 1
     fi
   fi
   if hg_gestural_on; then _hg_mon="gesture monitor registered"; else _hg_mon="no gesture monitor needed (not gestural)"; fi
@@ -2133,7 +2217,7 @@ hg_bootloop_message() {
 # status): skip_mount back in step with the mount mode (hg_mount_resolve; so re-enabling the module
 # mounts it again), the health record, one notification.
 hg_bootloop_notice() {
-  hg_sync_skip_mount "$1" "$(hg_mount_mode "$1" "$(hg_config_get MOUNT)")"
+  hg_sync_skip_mount "$1" "$(hg_mount_mode "$1" "$(hg_config_mount)")"
   if [ "$2" = 0 ]; then _hg_st=ok; else _hg_st=FAILED; fi
   hg_health_status rolled-back "FAILED: $HG_BOOT_TRIES boots in a row did not finish starting up; module disabled, restore $_hg_st"
   hg_log "boot-loop protection: restore $_hg_st, owner notified"
@@ -2157,14 +2241,15 @@ hg_ensure_config() {
   mkdir -p "$HG_DATA" && cp "$1/config.default" "$HG_DATA/config"
 }
 
-# Prints the value of setting $1 in $HG_DATA/config (the last line wins, as when it is sourced);
-# empty if none.
-hg_config_get() {
-  awk -v k="$1" '
-    { sub(/\r$/, "") }
-    $0 ~ ("^[ \t]*" k "=") { v = $0; sub(/^[ \t]*[^=]*=/, "", v) }
-    END { print v }
-  ' "$HG_DATA/config" 2>/dev/null
+# Prints MOUNT as post-fs-data, service.sh and action.sh see it (they source the config,
+# hg_load_config): the config is sourced here too, in a subshell, so quotes (MOUNT="self"), a
+# trailing comment or a later line read alike everywhere; empty when unset, or when the config
+# does not parse (then every setting takes its default, as in hg_load_config). For the callers
+# that load no config: customize.sh (in the installer's shell) and the guard's boot-loop notice.
+hg_config_mount() {
+  [ -f "$HG_DATA/config" ] || return 0
+  ( MOUNT=""; . "$HG_DATA/config" >/dev/null 2>&1 && printf '%s\n' "${MOUNT:-}" ) 2>/dev/null
+  return 0
 }
 
 # Removes every line of setting $1 from $HG_DATA/config (temp file + rename).
@@ -2353,9 +2438,10 @@ hg_metamodule_active() {
 # log and action.sh). auto picks metamodule (mixed) when hg_metamodule_active finds one, unless the
 # marker metamodule-missed names that same metamodule and versionCode: at an earlier boot it was
 # chosen and did not mount our APK (hg_mount_check), so self is used until the metamodule changes
-# (an update, another one) or the owner sets MOUNT again (setconf.sh drops the marker).
+# (an update, another one) or the owner sets MOUNT again (setconf.sh drops the marker). A CR at
+# the end of $2 (a config saved by a Windows editor, then sourced) is dropped.
 hg_mount_resolve() {
-  HG_MOUNT_REQ="$2"
+  HG_MOUNT_REQ="${2%"$(printf '\r')"}"
   case "$HG_MOUNT_REQ" in metamodule|self) ;; *) HG_MOUNT_REQ=auto ;; esac
   case "$HG_MOUNT_REQ" in
     self) HG_MM_ID=""; HG_MM_VC=""; HG_MOUNT_MODE=self; HG_MOUNT_DESC="self (MOUNT=self)" ;;
@@ -2603,7 +2689,10 @@ hg_app_version_check() {
   _hg_avn=$(( _hg_avn + 1 )); echo "$_hg_avn" > "$HG_DATA/stale-boots"
   HG_STALE_APK="app $_hg_ava, module $_hg_avm"; hg_publish_status # About: update not applied
   _hg_avp=/system/priv-app/HyperGestures/HyperGestures.apk
-  hg_log "service: stale APK (boot $_hg_avn in a row): mounted $_hg_avp"     "$($HG_CMD_STAT -c '%s bytes, mtime %y' "$HG_ROOT$_hg_avp" 2>/dev/null || echo unreadable);"     "the module's $($HG_CMD_STAT -c '%s bytes, mtime %y' "$1$_hg_avp" 2>/dev/null || echo unreadable)"
+  hg_log "service: stale APK (boot $_hg_avn in a row): mounted $_hg_avp" \
+    "$($HG_CMD_STAT -c '%s bytes, mtime %y' "$HG_ROOT$_hg_avp" 2>/dev/null || echo unreadable);" \
+    "the module's $($HG_CMD_STAT -c '%s bytes, mtime %y' "$1$_hg_avp" 2>/dev/null ||
+      echo unreadable)"
   rm -f "$HG_DATA/apk-stamp"
   if hg_redate_files "$1"; then _hg_avr="module files re-dated"; else _hg_avr="re-dating the module files FAILED"; fi
   if [ "$_hg_avn" -gt 1 ]; then
@@ -2689,7 +2778,10 @@ hg_post_fs_data_main() {
   hg_mount_resolve "$1" "${MOUNT:-}"
   _hg_mode="$HG_MOUNT_MODE"
   if [ "$_hg_mode" = self ]; then _hg_pre=""; else _hg_pre="metamodule + overlay "; fi
-  printf '%s %s %s %s\n%s\n' "$HG_MOUNT_REQ" "$_hg_mode" "${HG_MM_ID:--}" "${HG_MM_VC:--}" "$HG_MOUNT_DESC" > "$HG_DATA/mount-mode"
+  # mount-mode: "REQ MODE ID VC", the description, and this boot's id (action.sh shows the
+  # per-boot records only for the boot they belong to).
+  printf '%s %s %s %s\n%s\n%s\n' "$HG_MOUNT_REQ" "$_hg_mode" "${HG_MM_ID:--}" "${HG_MM_VC:--}" \
+    "$HG_MOUNT_DESC" "$(hg_boot_id)" > "$HG_DATA/mount-mode"
   hg_log "mount mode: $HG_MOUNT_DESC"
   hg_sync_skip_mount "$1" "$_hg_mode"
   hg_drop_apk_caches "$1" "$_hg_mode"
@@ -2773,9 +2865,12 @@ hg_service_main() {
   fi
   # Running again: a later disable must undo again, with a fresh retry budget.
   rm -f "$HG_DATA/guard-restored" "$HG_DATA/restore-gave-up" "$HG_DATA/restore-attempts"
-  # Per-boot watchdog state: restore.sh's "restored" marker, setconf's watchdog-stop and the
+  # Per-boot watchdog state: restore.sh's "restored" marker (unless it names this boot: restore.sh
+  # ran since boot_completed, and setup must not undo it), setconf's watchdog-stop and the
   # gestural re-apply count.
-  rm -f "$HG_DATA/restored" "$HG_DATA/watchdog-stop" "$HG_DATA/gestural-reapplies"
+  _hg_rsb=""; [ -f "$HG_DATA/restored" ] && IFS= read -r _hg_rsb < "$HG_DATA/restored"
+  [ -n "$_hg_rsb" ] && [ "$_hg_rsb" = "$(hg_boot_id)" ] || rm -f "$HG_DATA/restored"
+  rm -f "$HG_DATA/watchdog-stop" "$HG_DATA/gestural-reapplies"
   hg_drop_stale_locks
   hg_ensure_config "$1"
   hg_load_config
@@ -2793,13 +2888,10 @@ hg_service_main() {
   _hg_why="$(hg_firmware_problem "$1")"
   if [ -n "$_hg_why" ]; then
     if [ "$STRICT_FIRMWARE" != 1 ]; then
+      # No notice: the app reads HyperOS's binder codes from the phone itself
+      # (HgShellInterfaces) and reports any fallback on its status card; an OTA is no news.
       hg_log "$_hg_why; setting up anyway (STRICT_FIRMWARE=0), the health check decides"
-      # Once per firmware: the next boots on the same build only log it.
-      _hg_head="$(hg_firmware_head "$1")"
-      if [ "$(cat "$HG_DATA/firmware-notified" 2>/dev/null)" != "$_hg_head" ]; then
-        hg_notify "New HyperOS version ($(hg_phone_os_version)): HyperGestures is checking compatibility and turns itself off if anything is wrong."
-        echo "$_hg_head" > "$HG_DATA/firmware-notified"
-      fi
+      rm -f "$HG_DATA/firmware-notified" # left by modules before 0.4.0.5
     elif [ "$IGNORE_FINGERPRINT" != 1 ]; then
       hg_firmware_refuse "$1" "$_hg_why"
       hg_health_status refused "not run: firmware refused (STRICT_FIRMWARE=1)"
@@ -2838,13 +2930,25 @@ hg_service_main() {
     hg_health_status not-set-up "not run: the module was disabled or marked for removal during boot"
     return 0
   fi
+  # restore.sh run while this boot waited: the owner asked for stock, set nothing up.
+  hg_restored_stop "setup" && return 0
   hg_crash_reset
   hg_record_nav_state
   [ "$DISABLE_MIUIHOME" = 1 ] && hg_disable_miuihome
   hg_power_exempt
   hg_apply_nav_mode "$NAV_MODE"
   rm -f "$HG_DATA/dormant-restored" # a later dormant boot puts back what this one changed
-  hg_health_check "$1" || { hg_after_rollback "$1"; return 0; }
+  if [ -f "$HG_DATA/restored" ]; then
+    # restore.sh began while setup ran: what setup changed may have come after its restore.
+    hg_restore_setup >/dev/null 2>&1
+    hg_restored_stop "setup (undone again)"; return 0
+  fi
+  hg_health_check "$1"
+  case $? in
+    0) ;;
+    2) return 0 ;; # restore.sh ran: nothing to watch
+    *) hg_after_rollback "$1"; return 0 ;;
+  esac
   [ "$WATCHDOG" = 1 ] || return 0
   hg_home_init
   hg_watchdog_loop "$1"

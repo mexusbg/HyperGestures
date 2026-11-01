@@ -85,11 +85,35 @@ PATH="$T/suid:\$PATH" exec sh -c "\$3"
 EOF
   chmod +x "$T/su"
 }
+# setup's stubs: written (and made executable) once, kept in $T/.stubs; every later setup copies
+# them back over whatever a test put in their place (one cp instead of a write and a chmod each).
+SETUP_STUBS="settings overlay pm am appops role notify su pidof reboot content zcat ksud getprop"
+SETUP_STUBS="$SETUP_STUBS dumpsys mount umount chcon"
+setup_stubs() {
+  if [ -d "$T/.stubs" ]; then cp -p "$T/.stubs/"* "$T/"; return 0; fi
+  stub settings "case \"\$*\" in \"get global force_fsg_nav_bar\") cat \"$T/fsg\";; esac"
+  stub overlay "case \"\$*\" in list*) cat \"$T/overlays\";; esac"
+  stub pm 'case "$*" in "list packages -d"*) echo "";; "list packages -U --user 0 com.hypergestures") printf "package:com.hypergestures.other uid:10999\npackage:com.hypergestures uid:10234\n";; esac'
+  stub am ''; stub appops ''; stub role 'echo com.teslacoilsw.launcher'
+  stub notify ''
+  su_as # runs the -c script, `id` saying the uid asked for
+  stub pidof 'case "$1" in com.android.systemui) echo 2311;; *) echo 7450;; esac' # pidof SystemUI / com.hypergestures
+  stub reboot ''
+  pk_stub miuiAuto
+  stub zcat 'exec gzip -dc "$@"'                       # records each .gz entry the crash watch opens
+  stub ksud 'exit 1'                                   # no `ksud profile` unless a test says so
+  stub getprop "case \"\$1\" in ro.build.fingerprint) cat \"$T/fingerprint\";; *) echo 1;; esac"
+  stub dumpsys "cat \"$FIX/sysui_connected.txt\""
+  stub mount ''; stub umount ''; stub chcon ''         # never the host's (mountfix sets up a payload)
+  mkdir -p "$T/.stubs"; for _s in $SETUP_STUBS; do cp -p "$T/$_s" "$T/.stubs/$_s"; done
+}
 setup() {
-  rm -f "$T/calls" "$T/sleeps" "$T/dumpcount" "$T/gp" "$T/out" "$T"/dropbox.* "$T"/boxseq.* "$T"/boxcount.* "$T"/boxrc.* "$T/input" "$T/inputseq" "$T/inputcount"
+  rm -f "$T/calls" "$T/sleeps" "$T/dumpcount" "$T/gp" "$T/out" "$T"/dropbox.* "$T"/boxseq.* "$T"/boxcount.* "$T"/boxrc.* "$T/input" "$T/inputseq" "$T/inputcount" \
+    "$T/nsleeps" \
+    "$T/pk" "$T/pkempty"
   rm -rf "$T/data" "$T/mod" "$T/svc" "$T/service.d" "$T/post-fs-data.d" "$T/rescache" "$T/fakebin" \
     "$T/root" "$T/stage" "$T/mounts" "$T/dropbox" "$T/proc" "$T/modules" "$T/modules_update" "$T/metamodule" \
-    "$T/upd" "$T/crashed" "$T/appfiles" "$T/global" "$T/global.fail"
+    "$T/upd" "$T/crashed" "$T/appfiles" "$T/global" "$T/global.fail" "$T/wallbin" "$T/wall"
   # the state dir, the dropbox, SystemUI (pid 2311) and our process (7450), and an enabled
   # metamodule that the scan finds (no /data/adb/metamodule link: mklink adds one)
   mkdir -p "$T/data" "$T/dropbox" "$T/proc/2311" "$T/proc/7450" "$T/modules/hybrid_mount"
@@ -101,31 +125,19 @@ setup() {
   echo 1 > "$T/fsg"                                    # force_fsg_nav_bar as `settings get` reports it
   printf '[x] %s\n[ ] %s\n' "$THREEBUTTON" "$GESTURAL" > "$T/overlays" # `cmd overlay list`
   echo "$FP" > "$T/fingerprint"                        # ro.build.fingerprint
-  stub settings "case \"\$*\" in \"get global force_fsg_nav_bar\") cat \"$T/fsg\";; esac"
-  stub overlay "case \"\$*\" in list*) cat \"$T/overlays\";; esac"
-  stub pm 'case "$*" in "list packages -d"*) echo "";; "list packages -U --user 0 com.hypergestures") printf "package:com.hypergestures.other uid:10999\npackage:com.hypergestures uid:10234\n";; esac'
-  stub am ''; stub appops ''; stub role 'echo com.teslacoilsw.launcher'
-  stub notify ''
-  su_as # runs the -c script, `id` saying the uid asked for
+  setup_stubs
+  echo miuiAuto > "$T/pk"                              # PowerKeeper's row for us (pk_stub miuiAuto)
   _hg_ms_off=1 # no log copy jobs in the background unless a test asks (msetup)
-  stub pidof 'case "$1" in com.android.systemui) echo 2311;; *) echo 7450;; esac' # pidof SystemUI / com.hypergestures
-  stub reboot ''; export HG_CMD_REBOOT="$T/reboot" HG_CMD_REBOOT_FALLBACK="$T/reboot"
-  pk_stub miuiAuto
-  stub zcat 'exec gzip -dc "$@"'                       # records each .gz entry the crash watch opens
-  stub ksud 'exit 1'                                   # no `ksud profile` unless a test says so
-  stub getprop "case \"\$1\" in ro.build.fingerprint) cat \"$T/fingerprint\";; *) echo 1;; esac"
-  stub dumpsys "cat \"$FIX/sysui_connected.txt\""
-  stub mount ''; stub umount ''; stub chcon ''         # never the host's (mountfix sets up a payload)
+  export HG_CMD_REBOOT="$T/reboot" HG_CMD_REBOOT_FALLBACK="$T/reboot"
   unset HG_CMD_STAT                                    # the host's stat, unless a test stubs it
   # A fake /proc/uptime (the monotonic clock hg_wait_provider reads): `sleep` and slow stubs
-  # advance it, nothing really waits. $T/date answers `date +%s` from the same clock.
+  # advance it, nothing really waits.
   echo "1000.42 3000.17" > "$T/uptime"
-  printf '#!/bin/sh\ncut -d. -f1 "%s/uptime"\n' "$T" > "$T/date"; chmod +x "$T/date"
   echo boot-1 > "$T/bootid"                            # /proc/sys/kernel/random/boot_id
   export HG_CMD_SETTINGS="$T/settings" HG_CMD_OVERLAY="$T/overlay" HG_CMD_PM="$T/pm" \
          HG_CMD_AM="$T/am" HG_CMD_APPOPS="$T/appops" HG_CMD_ROLE="$T/role" \
          HG_CMD_NOTIFY="$T/notify" HG_CMD_DUMPSYS="$T/dumpsys" HG_CMD_GETPROP="$T/getprop" \
-         HG_CMD_SU="$T/su" HG_CMD_CONTENT="$T/content" HG_CMD_LOG=true HG_CMD_DATE="$T/date" HG_DATA="$T/data" HG_MODDIR="$T/mod" \
+         HG_CMD_SU="$T/su" HG_CMD_CONTENT="$T/content" HG_CMD_LOG=true HG_DATA="$T/data" HG_MODDIR="$T/mod" \
          HG_GUARD="$T/service.d/hypergestures-guard.sh" HG_UPTIME="$T/uptime" HG_BOOT_ID_FILE="$T/bootid" \
          HG_CMD_PIDOF="$T/pidof" HG_CMD_KSUD="$T/ksud" HG_PKG_CACHE="$T/pkgcache" HG_RESCACHE="$T/rescache" \
          HG_OLD_OVERLAY_GUARD="$T/post-fs-data.d/hypergestures-overlay-guard.sh" \
@@ -136,18 +148,24 @@ setup() {
   unset NAV_MODE DISABLE_MIUIHOME WATCHDOG IGNORE_FINGERPRINT STRICT_FIRMWARE MOUNT HEALTH_TEST HG_SYNC \
     _hg_cr_mode _hg_cr_seen _hg_cr_ls _hg_cr_lo _hg_cr_age _hg_cr_ref _hg_cr_fast HG_CRASH_SEEN \
     _hg_wd_miss _hg_wd_spid _hg_wd_opid _hg_wd_since _hg_wd_elapsed _hg_pw_at _hg_pw_tries HG_WD CRASH_AT _hg_roles _hg_home_boot _hg_home_told _hg_ms_wait _hg_app_uid _hg_tk \
-    HG_STATE HG_HEALTH HG_STALE_APK _hg_xb _hg_xm HG_FACT_PID _hg_hfs
+    HG_STATE HG_HEALTH HG_STALE_APK _hg_xb _hg_xm HG_FACT_PID _hg_hfs HG_FINAL_WHY NSLEEP
   tick() { advance "$1"; crash_tick; }
   . "$TPL/common/functions.sh"
   HG_HEALTH_WINDOW=15 # one health tick; the health-check tests (hsetup) use longer windows
   HG_ROLLBACK_WATCH=0 # no post-rollback watch; its own tests (rwsetup) use the real 600 s
-  sleep() { # records, no waiting; a wait loop that never ends is stopped (exit 99) instead of hanging
+  # Records, no waiting; a wait loop that never ends is stopped (exit 99) instead of hanging.
+  # NSLEEP = the sleeps so far ($T/sleeps' lines), kept in $T/nsleeps with builtins only, so a
+  # sleep in a subshell counts too; a test that empties $T/sleeps starts it again at 0.
+  sleep() {
+    NSLEEP=0; [ -s "$T/sleeps" ] && { read -r NSLEEP < "$T/nsleeps"; } 2>/dev/null
+    NSLEEP=$(( ${NSLEEP:-0} + 1 )); echo "$NSLEEP" > "$T/nsleeps"
     echo "$1" >> "$T/sleeps"; tick "$1"
-    if [ "$(wc -l < "$T/sleeps")" -gt 300 ]; then echo "runaway wait loop" >&2; exit 99; fi
+    if [ "$NSLEEP" -gt 300 ]; then echo "runaway wait loop" >&2; exit 99; fi
   }
 }
 advance() { # advance the clock by $1 s (one made unreadable on purpose stays so)
-  _u="$(cut -d. -f1 "$T/uptime" 2>/dev/null)"; case "$_u" in ''|*[!0-9]*) return 0 ;; esac
+  _u=""; { read -r _u _r < "$T/uptime"; } 2>/dev/null; _u="${_u%%.*}"
+  case "$_u" in ''|*[!0-9]*) return 0 ;; esac
   echo "$(( _u + $1 )).42 3000.17" > "$T/uptime"
 }
 tick() { advance "$1"; crash_tick; } # what `sleep` does: the clock, and crash_at's crashes; a test may swap it
@@ -169,7 +187,7 @@ crash_at() { # crash_at N PROCESS [TAG] [COUNT] [KIND]: COUNT (2) entries once t
   CRASH_AT="$1"; CRASH_WHO="$2"; CRASH_TAG="${3:-system_app_crash}"; CRASH_N="${4:-2}"; CRASH_KIND="${5:-txt}"
 }
 crash_tick() {
-  [ -n "${CRASH_AT:-}" ] && [ "$(wc -l < "$T/sleeps")" -ge "$CRASH_AT" ] || return 0
+  [ -n "${CRASH_AT:-}" ] && [ "${NSLEEP:-0}" -ge "$CRASH_AT" ] || return 0
   CRASH_AT=""; _i=0
   while [ "$_i" -lt "$CRASH_N" ]; do dbe "$CRASH_TAG" "$CRASH_WHO" "" "$CRASH_KIND"; _i=$(( _i + 1 )); done
 }
@@ -474,7 +492,7 @@ if [ "$HG_WD" = 0 ] && [ "$(grep -c '^dumpsys activity' "$T/calls")" = 3 ] \
    && [ "$(grep -c "watchdog: pidof printed nothing" "$T/data/log.txt")" = 1 ]; then
   ok watchdog_without_pids_checks_the_bind_every_round; else bad watchdog_without_pids_checks_the_bind_every_round; fi
 setup; hg_crash_reset; seq_dumpsys sysui_connected.txt sysui_disconnected.txt
-tick() { advance "$1"; [ "$(wc -l < "$T/sleeps")" = 2 ] && rm -rf "$T/proc/2311"; return 0; } # SystemUI dies in the 2nd sleep
+tick() { advance "$1"; [ "$NSLEEP" = 2 ] && rm -rf "$T/proc/2311"; return 0; } # SystemUI dies in the 2nd sleep
 hg_watchdog_loop; tick() { advance "$1"; crash_tick; }
 if [ "$(sleeps)" = "120 120 30 30 " ] && has "navbar.threebutton" && [ "$(grep -c '^dumpsys activity' "$T/calls")" = 4 ]; then
   ok watchdog_ticks_every_120s_while_bound_30s_after_a_miss; else bad "watchdog_ticks_every_120s_while_bound_30s_after_a_miss ($(sleeps))"; fi
@@ -507,18 +525,28 @@ if ! hg_wait_provider 60 && [ "$(grep -c '^dumpsys' "$T/calls")" = 3 ]; then
 # The budget runs on /proc/uptime, which NTP or a clock change can't move. A wall clock jumping
 # back 30 s at every read (and one that reads empty) must not stretch or break the wait.
 setup; stub dumpsys "cat \"$FIX/sysui_disconnected.txt\""
-printf '#!/bin/sh\nn=$(cat "%s/wall" 2>/dev/null || echo 5000); echo $((n - 30)) > "%s/wall"; echo $((n - 30))\n' "$T" "$T" > "$T/date"
-( hg_wait_provider 60 ); r=$?
+wallclock() { # a `date` first on PATH ($T/wallbin): `jump STEP START` goes back STEP s at each
+  # read (from START); `says TEXT` prints TEXT
+  mkdir -p "$T/wallbin"
+  case "$1" in
+    jump) printf '#!/bin/sh\nn=$(cat "%s" 2>/dev/null || echo %s)\n' "$T/wall" "$3"
+      printf 'echo $((n - %s)) > "%s"; echo $((n - %s))\n' "$2" "$T/wall" "$2" ;;
+    *) printf '#!/bin/sh\necho "%s"\n' "$2" ;;
+  esac > "$T/wallbin/date"
+  chmod +x "$T/wallbin/date"
+}
+wallclock jump 30 5000
+( PATH="$T/wallbin:$PATH"; hg_wait_provider 60 ); r=$?
 if [ "$r" = 1 ] && [ "$(grep -c '^dumpsys' "$T/calls")" = 13 ]; then
   ok wait_provider_ignores_wall_clock_jumps; else bad "wait_provider_ignores_wall_clock_jumps (rc=$r, $(grep -c '^dumpsys' "$T/calls") dumps)"; fi
 # Without a readable clock the wait is still bounded: at most $1/5+1 dumps, 5 s apart.
-setup; stub dumpsys "cat \"$FIX/sysui_disconnected.txt\""; printf '#!/bin/sh\n' > "$T/date"
+setup; stub dumpsys "cat \"$FIX/sysui_disconnected.txt\""; wallclock says ""
 export HG_UPTIME="$T/no-such-uptime"
-( hg_wait_provider 60 ); r=$?
+( PATH="$T/wallbin:$PATH"; hg_wait_provider 60 ); r=$?
 if [ "$r" = 1 ] && [ "$(grep -c '^dumpsys' "$T/calls")" = 13 ] && [ "$(sleeps)" = "$(ones 60)" ]; then
   ok wait_provider_without_clock_is_bounded; else bad "wait_provider_without_clock_is_bounded (rc=$r, $(grep -c '^dumpsys' "$T/calls") dumps)"; fi
-setup; stub dumpsys "cat \"$FIX/sysui_disconnected.txt\""; echo "garbage" > "$T/uptime"; printf '#!/bin/sh\necho x\n' > "$T/date"
-( hg_wait_provider 10 ); r=$?
+setup; stub dumpsys "cat \"$FIX/sysui_disconnected.txt\""; echo "garbage" > "$T/uptime"; wallclock says x
+( PATH="$T/wallbin:$PATH"; hg_wait_provider 10 ); r=$?
 if [ "$r" = 1 ] && [ "$(grep -c '^dumpsys' "$T/calls")" = 3 ]; then
   ok wait_provider_with_unparsable_clock_is_bounded; else bad "wait_provider_with_unparsable_clock_is_bounded (rc=$r, $(grep -c '^dumpsys' "$T/calls") dumps)"; fi
 setup; stub dumpsys "cat \"$FIX/sysui_disconnected.txt\""
@@ -642,7 +670,7 @@ if [ -f "$T/svc/disable" ] && ! has "force-stop" && grep -q "expected-fingerprin
 
 setup; mkmod; printf 'NAV_MODE=keep\n' > "$T/data/config"
 seq_dumpsys sysui_connected.txt sysui_connected.txt sysui_connected.txt sysui_connected.txt sysui_disconnected.txt
-tick() { advance "$1"; [ "$(wc -l < "$T/sleeps")" = 2 ] && rm -rf "$T/proc/2311"; return 0; } # SystemUI dies after the window
+tick() { advance "$1"; [ "$NSLEEP" = 2 ] && rm -rf "$T/proc/2311"; return 0; } # SystemUI dies after the window
 hg_service_main "$T/svc" # bound through the health window, then the watchdog sees it go
 tick() { advance "$1"; crash_tick; }
 if grep -q 'DISABLE_MIUIHOME=1 WATCHDOG=1 IGNORE_FINGERPRINT=0 STRICT_FIRMWARE=0' "$T/data/log.txt" && has "am force-stop" \
@@ -1124,7 +1152,7 @@ if [ -f "$T/data/dormant" ] && nomount && ! has "force-stop" && ! has "^notify" 
   ok boot_after_a_rollback_with_miuihome_as_home_is_dormant; else bad "boot_after_a_rollback_with_miuihome_as_home_is_dormant ($(cat "$T/data/health-status"))"; fi
 # The dormant boot's watchdog only watches HOME: one notification when another launcher is chosen.
 dormant 'WATCHDOG=1\n'
-tick() { advance "$1"; n=$(wc -l < "$T/sleeps"); [ "$n" = 1 ] && roles "$NOVA" "" new; [ "$n" = 2 ] && roles "$NOVA" "" new
+tick() { advance "$1"; n=$NSLEEP; [ "$n" = 1 ] && roles "$NOVA" "" new; [ "$n" = 2 ] && roles "$NOVA" "" new
   [ "$n" = 3 ] && : > "$T/svc/disable"; return 0; }
 hg_service_main "$T/svc"; tick() { advance "$1"; crash_tick; }
 if [ "$(sleeps)" = "120 120 120 " ] && [ "$(notified | grep -c .)" = 1 ] \
@@ -1172,9 +1200,12 @@ setup; roles sms.app nohome; stub role "printf '%s;other.pkg\\n' $MIUI"; a=$(hst
 hg_home_state live; b="$HG_HOME_STATE:$HG_HOME:$HG_HOME_SRC"; c=$(cat "$T/data/home-role" 2>/dev/null)
 if [ "$a" = "unknown:" ] && [ "$b" = "dormant:$MIUI:cmd role" ] && [ "$c" = "$MIUI" ]; then
   ok home_state_live_asks_cmd_role_when_roles_xml_names_none; else bad "home_state_live_asks_cmd_role_when_roles_xml_names_none ($a|$b|$c)"; fi
-# Every service.sh run checks once (here: an active boot that ends without the watchdog).
+# Every service.sh run checks once (here: an active boot that ends without the watchdog); setup
+# asks again (hg_disable_miuihome), and with MiuiHome as HOME leaves it running.
 setup; mkmod; printf 'NAV_MODE=gestural\nWATCHDOG=0\n' > "$T/data/config"; stub role "echo $MIUI"; hg_service_main "$T/svc"
-if [ "$(grep -c "role get-role-holders --user 0" "$T/calls")" = 1 ] && [ "$(cat "$T/data/home-role")" = "$MIUI" ]; then
+if [ "$(grep -c "role get-role-holders --user 0" "$T/calls")" = 2 ] \
+   && [ "$(cat "$T/data/home-role")" = "$MIUI" ] && ! has "force-stop com.miui.home" \
+   && grep -q "MiuiHome is the home app: left running" "$T/data/log.txt"; then
   ok service_checks_home_with_cmd_role_once; else bad service_checks_home_with_cmd_role_once; fi
 
 # --- 0.3.5-alpha leftovers and the static overlay's idmap (post-fs-data) ---------------------
@@ -1300,8 +1331,8 @@ AF="$T/appfiles/files"
 msetup() { setup; unset _hg_ms_off; }
 mwait() { # until the background copy has ended (at most 15 s)
   [ -f "$T/data/mirror-pid" ] || return 0
-  _p=$(cat "$T/data/mirror-pid"); _n=0
-  while hg_job_running "$_p" && [ "$_n" -lt 300 ]; do /bin/sleep 0.05; _n=$((_n + 1)); done
+  read -r _p _ps < "$T/data/mirror-pid"; _n=0 # the job's pid and start time
+  while hg_job_running "$_p" "$_ps" && [ "$_n" -lt 300 ]; do /bin/sleep 0.05; _n=$((_n + 1)); done
 }
 msync() { hg_mirror_sync "$@"; mwait; }
 sus() { cat "$T/calls" 2>/dev/null | grep -c "^su "; }
@@ -1735,11 +1766,9 @@ hg_service_main "$T/svc" # 3 crashes before boot, none after
 if healthy && ! has "dumpsys dropbox"; then
   ok health_crashes_from_before_boot_are_never_counted; else bad "health_crashes_from_before_boot_are_never_counted ($(hstatus))"; fi
 hsetup; crash_at 1 "$SUI"
-cat > "$T/date" <<EOF
-#!/bin/sh
-n=\$(cat "$T/wall" 2>/dev/null || echo 90000); echo \$((n - 86400)) > "$T/wall"; echo \$((n - 86400))
-EOF
+wallclock jump 86400 90000; _op="$PATH"; PATH="$T/wallbin:$PATH"
 hg_service_main "$T/svc" # the wall clock jumps back a day at every read: nothing counts on it
+PATH="$_op"
 if rolled_back "$T/svc" && notified | grep -qF "com.android.systemui crashed 2 times since setup"; then
   ok health_crash_counting_ignores_the_wall_clock; else bad "health_crash_counting_ignores_the_wall_clock ($(hstatus))"; fi
 # The dropbox prunes old entries: nothing is counted against a baseline, so that hides nothing and
@@ -1788,24 +1817,24 @@ if rolled_back "$T/svc" && notified | grep -qF "${HEALTH_FAIL}com.android.system
   ok health_fallback_counts_dumpsys_when_the_dropbox_cannot_be_listed; else bad "health_fallback_counts_dumpsys_when_the_dropbox_cannot_be_listed ($(hstatus))"; fi
 hsetup; echo "$OTA" > "$T/fingerprint"; hg_service_main "$T/svc"
 if [ ! -e "$T/svc/disable" ] && has "am force-stop" && on "$GESTURAL" && hstatus | grep -q '^ok' && [ "$(sleeps)" = "$H3" ] \
-   && notified | grep -qF "New HyperOS version (OS4.0.1.0): HyperGestures is checking compatibility and turns itself off if anything is wrong." \
-   && [ "$(notified | grep -c .)" = 1 ] && grep -q "firmware mismatch: built for $FP, this phone runs $OTA; setting up anyway" "$T/data/log.txt"; then
+   && ! notified && grep -q "firmware mismatch: built for $FP, this phone runs $OTA; setting up anyway" "$T/data/log.txt"; then
   ok health_firmware_mismatch_by_default_sets_up_with_the_health_check; else bad "health_firmware_mismatch_by_default_sets_up_with_the_health_check ($(hstatus))"; fi
-# The soft check's notice comes once per firmware: the next boots on the same build only log it; a
-# newer build notifies again.
+# An OTA is no news with the soft check (the app follows the firmware, HgShellInterfaces): the same
+# build again and a newer one are only logged, never notified.
 OTA2='Xiaomi/nezha_eea/nezha:17/CP2A.270101.001/OS4.0.1.1.XPAEUXM:user/release-keys'
 : > "$T/calls"; : > "$T/sleeps"; hg_service_main "$T/svc"; _again="$(notified | grep -c .)"
 : > "$T/calls"; : > "$T/sleeps"; echo "$OTA2" > "$T/fingerprint"; hg_service_main "$T/svc"
-if [ "$_again" = 0 ] && [ "$(notified | grep -c .)" = 1 ] && notified | grep -qF "New HyperOS version (OS4.0.1.1):" \
-   && [ "$(grep -c "this phone runs $OTA; setting up anyway" "$T/data/log.txt")" = 2 ] && hstatus | grep -q '^ok'; then
-  ok health_firmware_notice_once_per_firmware; else bad "health_firmware_notice_once_per_firmware (again=$_again; $(hstatus))"; fi
+if [ "$_again" = 0 ] && ! notified && [ ! -e "$T/data/firmware-notified" ] \
+   && [ "$(grep -c "this phone runs $OTA; setting up anyway" "$T/data/log.txt")" = 2 ] \
+   && grep -q "this phone runs $OTA2; setting up anyway" "$T/data/log.txt" && hstatus | grep -q '^ok'; then
+  ok health_firmware_mismatch_is_only_logged; else bad "health_firmware_mismatch_is_only_logged (again=$_again; $(hstatus))"; fi
 # service.sh grants our app POST_NOTIFICATIONS once, before its first notice (that one goes through the app).
-hsetup; echo "$OTA" > "$T/fingerprint"; am_says "Broadcast completed: result=1"; hg_service_main "$T/svc"
+hsetup; crash_at 1 "$SUI"; am_says "Broadcast completed: result=1"; hg_service_main "$T/svc"
 if [ "$(grep -c "^pm grant com.hypergestures android.permission.POST_NOTIFICATIONS$" "$T/calls")" = 1 ] \
-   && before "^pm grant com.hypergestures" "^$AM_NOTIFY New HyperOS version" && ! notified && hstatus | grep -q '^ok'; then
+   && before "^pm grant com.hypergestures" "^$AM_NOTIFY $HEALTH_FAIL" && ! notified; then
   ok service_grants_notifications_before_its_first_notice; else bad "service_grants_notifications_before_its_first_notice ($(hstatus))"; fi
 hsetup; echo "$OTA" > "$T/fingerprint"; crash_at 1 "$SUI"; hg_service_main "$T/svc"
-if [ -f "$T/svc/disable" ] && has "$HOME_BACK" && on "$THREEBUTTON" && [ "$(notified | grep -c .)" = 2 ] && notified | grep -qF "$HEALTH_FAIL"; then
+if [ -f "$T/svc/disable" ] && has "$HOME_BACK" && on "$THREEBUTTON" && [ "$(notified | grep -c .)" = 1 ] && notified | grep -qF "$HEALTH_FAIL"; then
   ok health_firmware_mismatch_that_breaks_things_rolls_back; else bad health_firmware_mismatch_that_breaks_things_rolls_back; fi
 hsetup 'HEALTH_TEST=fail\n'; hg_service_main "$T/svc"
 if rolled_back "$T/svc" && notified | grep -qF "${HEALTH_FAIL}forced by HEALTH_TEST$HEALTH_TAIL" && ! grep -q HEALTH_TEST "$T/data/config" \
@@ -2013,7 +2042,7 @@ if [ "$HG_WD" = 0 ] && [ "$_hg_wd_opid" = 7450 ]; then ok watchdog_bound_by_the_
 else bad "watchdog_bound_by_the_apps_value ($HG_WD)"; fi
 # The boot wait: the app's value ends it within a second, not at the next 5 s dump.
 setup; stub dumpsys "cat \"$FIX/sysui_disconnected.txt\""
-tick() { advance "$1"; [ "$(wc -l < "$T/sleeps")" = 2 ] && fact $FB; return 0; }
+tick() { advance "$1"; [ "$NSLEEP" = 2 ] && fact $FB; return 0; }
 hg_wait_provider 60; r=$?; tick() { advance "$1"; crash_tick; }
 if [ "$r" = 0 ] && [ "$(sleeps)" = "1 1 " ] && [ "$(sysdumps)" = 2 ]; then
   ok wait_provider_ends_at_the_apps_value
@@ -2451,21 +2480,21 @@ if has "overlay enable-exclusive --category $THREEBUTTON" && [ ! -e "$T/data/dor
 
 # After one crash of SystemUI the watchdog ticks every 15 s for 10 minutes, then every 120 s again.
 setup; hg_crash_reset; seq_dumpsys sysui_connected.txt; mkdir -p "$T/mod"; crash_at 1 "$SUI" system_app_crash 1
-tick() { advance "$1"; crash_tick; [ "$(wc -l < "$T/sleeps")" -ge 43 ] && : > "$T/mod/disable"; return 0; }
+tick() { advance "$1"; crash_tick; [ "$NSLEEP" -ge 43 ] && : > "$T/mod/disable"; return 0; }
 hg_watchdog_loop "$T/mod"; tick() { advance "$1"; crash_tick; }
 want="120 "; i=0; while [ "$i" -lt 40 ]; do want="${want}15 "; i=$((i+1)); done; want="${want}120 120 "
 if [ "$(sleeps)" = "$want" ] && ! grep -q "rollback" "$T/data/log.txt"; then
   ok watchdog_ticks_every_15s_for_10_minutes_after_a_crash; else bad "watchdog_ticks_every_15s_for_10_minutes_after_a_crash ($(sleeps))"; fi
 # A second crash inside those 10 minutes is caught at the next 15 s tick.
 setup; hg_crash_reset; seq_dumpsys sysui_connected.txt; mkdir -p "$T/mod"; crash_at 1 "$SUI" system_app_crash 1
-tick() { advance "$1"; crash_tick; [ "$(wc -l < "$T/sleeps")" = 3 ] && dbe system_app_crash "$SUI"; return 0; }
+tick() { advance "$1"; crash_tick; [ "$NSLEEP" = 3 ] && dbe system_app_crash "$SUI"; return 0; }
 hg_watchdog_loop "$T/mod" >/dev/null 2>&1; tick() { advance "$1"; crash_tick; }
 if [ "$(sleeps)" = "120 15 15 " ] && grep -q "rollback: com.android.systemui crashed 2 times" "$T/data/log.txt"; then
   ok watchdog_rolls_back_on_a_second_crash_within_15s; else bad "watchdog_rolls_back_on_a_second_crash_within_15s ($(sleeps))"; fi
 
 # A miss after a crash keeps the 30 s retry: a slow rebind still gets about 60 s before 3-button.
 setup; hg_crash_reset; seq_dumpsys sysui_connected.txt sysui_disconnected.txt; mkdir -p "$T/mod"; crash_at 1 "$SUI" system_app_crash 1
-tick() { advance "$1"; crash_tick; [ "$(wc -l < "$T/sleeps")" = 1 ] && rm -rf "$T/proc/2311"; return 0; } # SystemUI restarts in the 1st sleep
+tick() { advance "$1"; crash_tick; [ "$NSLEEP" = 1 ] && rm -rf "$T/proc/2311"; return 0; } # SystemUI restarts in the 1st sleep
 hg_watchdog_loop "$T/mod" >/dev/null 2>&1; tick() { advance "$1"; crash_tick; }
 if [ "$(sleeps)" = "120 30 30 " ] && has "navbar.threebutton"; then
   ok watchdog_keeps_30s_retries_after_a_crash; else bad "watchdog_keeps_30s_retries_after_a_crash ($(sleeps))"; fi
@@ -2492,7 +2521,7 @@ hg_after_rollback "$T/mod"
 if ! has "^reboot" && [ ! -f "$T/sleeps" ]; then ok after_rollback_reboots_only_once
 else bad after_rollback_reboots_only_once; fi
 rwsetup; mkdir -p "$T/mod"; : > "$T/mod/disable"; hg_crash_reset
-tick() { advance "$1"; [ "$(wc -l < "$T/sleeps")" = 2 ] && rm -f "$T/mod/disable"; crash_tick; }; crash_at 3 "$SUI"
+tick() { advance "$1"; [ "$NSLEEP" = 2 ] && rm -f "$T/mod/disable"; crash_tick; }; crash_at 3 "$SUI"
 hg_after_rollback "$T/mod"; tick() { advance "$1"; crash_tick; }
 if ! has "^reboot" && [ "$(sleeps)" = "15 15 " ]; then ok after_rollback_stops_when_the_module_is_re_enabled
 else bad "after_rollback_stops_when_the_module_is_re_enabled ($(sleeps))"; fi
@@ -2512,7 +2541,7 @@ if grep -q "^ok" "$T/data/health-status" && [ ! -e "$T/data/rollback-reboot" ] &
   ok healthy_setup_clears_the_rollback_reboot_marker; else bad healthy_setup_clears_the_rollback_reboot_marker; fi
 # A crash-loop rollback in the health check is followed by the watch (and its one reboot).
 rwsetup; mkmod; printf 'NAV_MODE=gestural\nDISABLE_MIUIHOME=1\nWATCHDOG=1\n' > "$T/data/config"; crash_at 1 "$SUI" system_app_crash 3
-tick() { advance "$1"; crash_tick; [ "$(wc -l < "$T/sleeps")" = 3 ] && dbe system_app_crash "$SUI"; return 0; }
+tick() { advance "$1"; crash_tick; [ "$NSLEEP" = 3 ] && dbe system_app_crash "$SUI"; return 0; }
 hg_service_main "$T/svc" >/dev/null 2>&1; tick() { advance "$1"; crash_tick; }
 if [ -f "$T/svc/disable" ] && has "^reboot" && grep -q "after rollback: watching" "$T/data/log.txt"; then
   ok service_watches_after_a_health_check_rollback; else bad service_watches_after_a_health_check_rollback; fi
@@ -2589,10 +2618,14 @@ if grep -q 'battery: No restrictions (Greeze' "$T/out" && grep -q 'greezer:.*NO_
 
 # --- the watchdog's No-restrictions retries (battery: each one starts an app_process VM) --------
 pcount() { grep -c "^content query" "$T/calls" 2>/dev/null; }
-# First 600 s: every round.
-wsetup; pk_stub noRestrict; : > "$T/calls"; wd; wtick 120; wd
-if [ "$(pcount)" = 2 ]; then ok watchdog_checks_the_battery_setting_every_round_at_first
-else bad "watchdog_checks_the_battery_setting_every_round_at_first ($(pcount))"; fi
+# First 600 s: every 120 s of watchdog time, not every 15 or 30 s round (the health check's last
+# check just ran, so not at the first round either).
+wsetup; pk_stub noRestrict; : > "$T/calls"
+wd; wtick 30; wd; wtick 30; wd; wtick 60; wd; a=$(pcount)
+wtick 15; wd; wtick 105; wd
+if [ "$a" = 1 ] && [ "$(pcount)" = 2 ]; then
+  ok watchdog_checks_the_battery_setting_every_120s_at_first
+else bad "watchdog_checks_the_battery_setting_every_120s_at_first ($a $(pcount))"; fi
 # After that, a quiet round makes no PowerKeeper call...
 wsetup; pk_stub noRestrict; wtick 600; wd; : > "$T/calls"; wtick 120; wd
 if [ "$(pcount)" = 0 ]; then ok watchdog_quiet_round_skips_the_battery_setting
@@ -2687,6 +2720,206 @@ wsetup; live_nav; printf '[x] %s\n' "$HIDE" > "$T/overlays"; : > "$T/data/dorman
 roles "$NOVA" "" new; wtick 120; wd
 if hidden && ! has "overlay disable" && notified | grep -qF "reboot to switch gestures to the new launcher"; then
   ok home_switch_away_from_miuihome_leaves_the_gesture_line; else bad home_switch_away_from_miuihome_leaves_the_gesture_line; fi
+
+# --- review round 2: restore.sh during setup, bounded commands, retries, records -----------------
+# restore.sh leaves its marker (this boot's id) BEFORE it restores, and takes it back on failure.
+setup
+stub pm "case \"\$1\" in enable) [ -f \"$T/data/restored\" ] && echo marked > \"$T/seen\";; esac"
+rm -f "$T/seen"; $SH "$TPL/restore.sh" > "$T/out" 2>&1
+if [ "$(cat "$T/seen" 2>/dev/null)" = marked ] && [ "$(cat "$T/data/restored")" = boot-1 ]; then
+  ok restore_script_marks_restored_before_restoring
+else bad "restore_script_marks_restored_before_restoring ($(cat "$T/out"))"; fi
+# restore.sh run while the boot waits for the provider: nothing is set up, nothing is recorded as
+# the original (PowerKeeper's value, the navigation), the health check never starts.
+rconfig() { printf 'NAV_MODE=gestural\nDISABLE_MIUIHOME=1\nWATCHDOG=1\n' > "$T/data/config"; }
+setup; mkmod; live_nav; rconfig; seq_dumpsys sysui_disconnected.txt sysui_connected.txt
+tick() { advance "$1"; [ "$NSLEEP" = 1 ] && echo boot-1 > "$T/data/restored"; return 0; }
+hg_service_main "$T/svc"; tick() { advance "$1"; crash_tick; }
+if ! has "force-stop com.miui.home" && ! has "enable-exclusive --category $GESTURAL" \
+   && ! has "^content update" && [ ! -e "$T/data/original-bgcontrol" ] \
+   && [ ! -e "$T/data/original-nav.txt" ] && [ "$(cat "$T/pk")" = miuiAuto ] \
+   && hstatus | grep -q "^not run: restore.sh ran this boot (setup stopped there)" \
+   && grep -q "setup: restore.sh ran this boot" "$T/data/log.txt" \
+   && [ "$(sleeps)" = "1 1 1 1 1 " ]; then
+  ok service_sets_nothing_up_after_restore_sh_ran_during_the_wait
+else bad "service_sets_nothing_up_after_restore_sh_ran_during_the_wait ($(hstatus); $(sleeps))"; fi
+# A marker of this boot written before service.sh's cleanup (restore.sh run right after
+# boot_completed) stays; one of an earlier boot goes.
+setup; mkmod; printf 'NAV_MODE=gestural\nWATCHDOG=0\n' > "$T/data/config"
+echo boot-1 > "$T/data/restored"; hg_service_main "$T/svc"
+a=0; [ -f "$T/data/restored" ] && ! has "force-stop com.miui.home" && a=1
+setup; mkmod; printf 'NAV_MODE=gestural\nWATCHDOG=0\n' > "$T/data/config"
+echo boot-0 > "$T/data/restored"; hg_service_main "$T/svc"
+b=0; [ ! -e "$T/data/restored" ] && has "force-stop com.miui.home" && b=1
+if [ "$a$b" = 11 ]; then ok service_keeps_only_this_boots_restored_marker
+else bad "service_keeps_only_this_boots_restored_marker ($a$b)"; fi
+# restore.sh run during the health window: the check ends at the next tick, no rollback, and a
+# pending No-restrictions retry never re-sets what restore.sh put back (nor records it as the
+# original).
+hsetup '' 120; pk_stub '' empty
+tick() { advance "$1"
+  [ "$NSLEEP" = 2 ] && { echo boot-1 > "$T/data/restored"; pk_stub miuiAuto; }; return 0; }
+hg_service_main "$T/svc"; r=$?; tick() { advance "$1"; crash_tick; }
+if [ "$r" = 0 ] && [ "$(sleeps)" = "15 15 " ] && [ "$(cat "$T/pk")" = miuiAuto ] \
+   && ! has "^content update" && [ ! -e "$T/data/original-bgcontrol" ] \
+   && [ ! -e "$T/svc/disable" ] && ! has "add-role-holder" \
+   && hstatus | grep -q "^not run: restore.sh ran this boot (health check stopped there)"; then
+  ok health_check_stops_when_restore_sh_runs_in_the_window
+else bad "health_check_stops_when_restore_sh_runs_in_the_window ($(hstatus); $(sleeps))"; fi
+# restore.sh begins while setup runs (here: as MiuiHome is stopped): setup is undone once more.
+setup; mkmod; live_nav; rconfig
+stub am "case \"\$1\" in force-stop) echo boot-1 > \"$T/data/restored\";; esac"
+hg_service_main "$T/svc"
+if before "am force-stop com.miui.home" "pm enable com.miui.home" && on "$THREEBUTTON" \
+   && ! on "$GESTURAL" && [ "$(cat "$T/pk")" = miuiAuto ] && [ ! -e "$T/data/original-bgcontrol" ] \
+   && [ ! -f "$T/sleeps" ] \
+   && hstatus | grep -q "^not run: restore.sh ran this boot (setup (undone again) stopped"; then
+  ok service_undoes_setup_again_when_restore_sh_ran_meanwhile
+else bad "service_undoes_setup_again_when_restore_sh_ran_meanwhile ($(hstatus))"; fi
+# The watchdog's gestural re-apply racing restore.sh: the recorded navigation is put back.
+setup; live_nav; NAV_MODE=gestural
+printf 'FSG=1\nNAVBAR=%s\n' "$THREEBUTTON" > "$T/data/original-nav.txt"
+echo "case \"\$1\" in enable-exclusive) : > \"$T/data/restored\";; esac" >> "$T/overlay"
+hg_reapply_gestural
+if on "$THREEBUTTON" && ! on "$GESTURAL" && grep -q "restore.sh ran meanwhile" "$T/data/log.txt"
+then ok watchdog_reapply_yields_to_restore_sh; else bad watchdog_reapply_yields_to_restore_sh; fi
+
+# Every device command of the undo paths and the watchdog's checks runs under hg_timeout.
+setup; live_nav; pk_stub ''; printf 'FSG=1\nNAVBAR=%s\n' "$THREEBUTTON" > "$T/data/original-nav.txt"
+printf '#!/bin/sh\necho "toybox-timeout $*" >> "%s/calls"\nshift; exec "$@"\n' "$T" > "$T/tbt"
+chmod +x "$T/tbt"; HG_TIMEOUT="$T/tbt"
+hg_power_get; hg_power_exempt; hg_power_set miuiAuto; hg_enabled_navbar_overlays > /dev/null
+hg_gesture_nav_active now; rm -f "$T/data/original-nav.txt"; hg_record_nav_state
+hg_disable_miuihome; hg_enable_miuihome; hg_restore_nav_state; hg_restore_home; hg_hide_line_off
+hg_apply_nav_mode threebutton; echo 0 > "$T/fsg"
+printf '[x] %s.transparent\n' "$HG_NAVBAR_PREFIX" > "$T/overlays"
+hg_ensure_visible_nav; hg_notify "x"; hg_grant_notifications
+HG_TIMEOUT="$T/no-toybox-timeout"
+n=$(grep -c '^toybox-timeout 10 ' "$T/calls"); m=$(grep -vc '^toybox-timeout ' "$T/calls")
+TB="^toybox-timeout 10 $T"
+if [ "$n" = "$m" ] && [ "$n" -ge 20 ] && has "$TB/content query" && has "$TB/overlay list" \
+   && has "$TB/role get-role-holders --user 0" && has "$TB/pm enable" \
+   && has "$TB/role add-role-holder"; then
+  ok undo_and_watchdog_commands_are_bounded_by_hg_timeout
+else bad "undo_and_watchdog_commands_are_bounded_by_hg_timeout ($n of $m)"; fi
+# cmd role failing or hanging: who is HOME is unknown, so MiuiHome is left running.
+setup; stub role 'exit 1'; hg_disable_miuihome
+if ! has "force-stop" && ! has "appops set" \
+   && grep -q "cmd role did not answer who is HOME" "$T/data/log.txt"; then
+  ok disable_miuihome_leaves_it_running_when_home_is_unknown
+else bad disable_miuihome_leaves_it_running_when_home_is_unknown; fi
+
+# A dormant boot whose battery restore fails (PowerKeeper not up yet) keeps the record and its
+# watchdog retries until it works; MiuiHome and the navigation are restored once all the same.
+dormant 'WATCHDOG=1\n'; pk_stub noRestrict; : > "$T/pkfail"
+echo miuiAuto > "$T/data/original-bgcontrol"
+tick() { advance "$1"; [ "$NSLEEP" = 1 ] && rm -f "$T/pkfail"
+  [ "$NSLEEP" = 3 ] && : > "$T/svc/disable"; return 0; }
+hg_service_main "$T/svc"; tick() { advance "$1"; crash_tick; }
+if [ -f "$T/data/dormant-restored" ] && [ "$(cat "$T/pk")" = miuiAuto ] \
+   && [ ! -e "$T/data/original-bgcontrol" ] && has "pm enable com.miui.home" \
+   && grep -q "battery setting is not back yet" "$T/data/log.txt" \
+   && grep -q "battery: com.hypergestures back to miuiAuto" "$T/data/log.txt"; then
+  ok dormant_watchdog_retries_a_failed_battery_restore
+else bad "dormant_watchdog_retries_a_failed_battery_restore ($(cat "$T/pk"); $(sleeps))"; fi
+# Without the watchdog: the next dormant boot retries it (and only it).
+dormant; pk_stub noRestrict; echo miuiAuto > "$T/data/original-bgcontrol"
+: > "$T/data/dormant-restored"; hg_service_main "$T/svc"
+if [ "$(cat "$T/pk")" = miuiAuto ] && [ ! -e "$T/data/original-bgcontrol" ] && ! has "pm enable"
+then ok later_dormant_boot_retries_a_failed_battery_restore
+else bad later_dormant_boot_retries_a_failed_battery_restore; fi
+setup; pk_stub noRestrict; echo miuiAuto > "$T/data/original-bgcontrol"; : > "$T/pkfail"
+hg_power_restore; r=$?; rm -f "$T/pkfail"
+if [ "$r" = 1 ] && [ -f "$T/data/original-bgcontrol" ]; then ok power_restore_reports_a_failure
+else bad "power_restore_reports_a_failure ($r)"; fi
+
+# MOUNT reads alike for customize.sh, post-fs-data and the guard: the config is sourced (quotes
+# and comments as the shell reads them; one that does not parse: auto, as everywhere else).
+setup; printf 'MOUNT="self"  # mine\n' > "$T/data/config"; cz; a=0
+[ -f "$T/upd/skip_mount" ] && grep -q "^ui: - mount: self (MOUNT=self); skip_mount set" "$T/out" \
+  && a=1
+mkdir -p "$T/mod"; hg_post_fs_data_main "$T/mod"; b=$(head -n 1 "$T/data/mount-mode")
+setup; printf 'MOUNT=self\nif then fi (\n' > "$T/data/config"; cz; c=0
+[ ! -e "$T/upd/skip_mount" ] && grep -q "^ui: - mount: auto → mixed (hybrid_mount)" "$T/out" \
+  && c=1
+mkdir -p "$T/mod"; ( hg_post_fs_data_main "$T/mod" ) 2>/dev/null
+d=$(head -n 1 "$T/data/mount-mode")
+setup; mkdir -p "$T/mod"; printf "MOUNT='self'\n" > "$T/data/config"
+hg_bootloop_notice "$T/mod" 0; e=0; [ -f "$T/mod/skip_mount" ] && e=1
+if [ "$a|$b|$c|$d|$e" = "1|self self - -|1|auto metamodule hybrid_mount 170|1" ]; then
+  ok mount_setting_reads_alike_in_customize_post_fs_data_and_the_guard
+else bad "mount_setting_reads_alike_in_customize_post_fs_data_and_the_guard ($a|$b|$c|$d|$e)"; fi
+
+# The log copy's job is known by pid and start time: a result means it has ended whatever runs
+# under that pid now, and a pid now held by another process (another start time) is not the job.
+msetup; echo "$$" > "$T/data/mirror-pid"; echo 0 > "$T/data/mirror-rc"; hg_mirror_reap; a=$?
+b=0; [ ! -e "$T/data/mirror-pid" ] && [ ! -e "$T/data/mirror-rc" ] && b=1
+msetup; echo "$$ 1" > "$T/data/mirror-pid"; hg_mirror_reap; c=$?
+d=0; grep -q "log copy: the copy ended without a result" "$T/data/log.txt" && d=1
+msetup; mkdir -p "$AF"; hg_log "x"; msync now; read -r p s < "$T/data/mirror-pid"
+if [ "$a$b$c$d" = 0111 ] && [ -n "$p" ] && case "$s" in ''|*[!0-9]*) false ;; *) true ;; esac
+then ok mirror_reap_is_not_fooled_by_a_reused_pid
+else bad "mirror_reap_is_not_fooled_by_a_reused_pid ($a$b$c$d '$p' '$s')"; fi
+
+# action.sh shows post-fs-data's records only for the boot they belong to: a module disabled at
+# boot (post-fs-data did not run) has an earlier boot's.
+pfdrec() { # pfdrec BOOT: post-fs-data's records, dormant, of boot BOOT
+  printf 'auto metamodule hybrid_mount 170\nauto → mixed (hybrid_mount)\n%s\n' "$1" \
+    > "$T/data/mount-mode"
+  echo "metamodule + overlay skipped: dormant" > "$T/data/mount-status"
+  echo "$MIUI" > "$T/data/dormant"
+}
+setup; mkmod; roles "$MIUI"; pfdrec boot-0; : > "$T/svc/disable"; action; cp "$T/out" "$T/out1"
+pfdrec boot-1; action
+if grep -q '^mount mode: no record this boot (post-fs-data did not run' "$T/out1" \
+   && grep -q '^mount: no record this boot' "$T/out1" \
+   && grep -q "^home: $MIUI; this boot: no record" "$T/out1" \
+   && grep -q '^next boot: nothing mounted (module disabled' "$T/out1" \
+   && ! grep -q 'auto → mixed' "$T/out1" \
+   && grep -q '^mount mode: auto → mixed (hybrid_mount)$' "$T/out" \
+   && grep -q "^home: $MIUI → dormant (" "$T/out"; then
+  ok action_shows_per_boot_records_only_for_their_boot
+else bad "action_shows_per_boot_records_only_for_their_boot ($(grep -h '^mount\|^home' \
+  "$T/out1" "$T/out" | tr '\n' '|'))"; fi
+setup; mountfix; hg_post_fs_data_main "$T/mod"
+if [ "$(sed -n 3p "$T/data/mount-mode")" = boot-1 ]; then ok post_fs_data_records_its_boot_id
+else bad post_fs_data_records_its_boot_id; fi
+
+# The health check's No-restrictions check: once at setup and once at the end, not at every
+# tick, unless it is pending; a pending one is retried at every tick until it works.
+hsetup '' 120; hg_service_main "$T/svc"; n=$(grep -c '^content query' "$T/calls")
+if healthy && [ "$(sleeps)" = "$H8" ] && [ "$n" = 3 ]; then
+  ok health_check_reads_the_battery_setting_only_at_the_end
+else bad "health_check_reads_the_battery_setting_only_at_the_end ($n)"; fi
+hsetup; pk_stub '' empty
+tick() { advance "$1"; [ "$NSLEEP" = 2 ] && pk_stub miuiAuto; return 0; }
+hg_service_main "$T/svc"; tick() { advance "$1"; crash_tick; }
+if healthy && [ "$(cat "$T/pk")" = noRestrict ] && [ ! -e "$T/data/power-pending" ] \
+   && [ "$(cat "$T/data/original-bgcontrol")" = miuiAuto ]; then
+  ok health_check_retries_a_pending_battery_setting_at_each_tick
+else bad "health_check_retries_a_pending_battery_setting_at_each_tick ($(cat "$T/pk"))"; fi
+
+# hg_health_final answers in HG_FINAL_WHY, in the caller's shell: its cross-checks run once.
+gon() { printf '[ ] %s\n[x] %s\n' "$THREEBUTTON" "$GESTURAL" > "$T/overlays"; } # gestural on
+setup; gon; fact $FB; fact $FM; hg_health_final > "$T/out"; a=$?; hg_health_final >> "$T/out"; b=$?
+setup; stub dumpsys "cat \"$FIX/sysui_disconnected.txt\""; hg_health_final > "$T/out2"; c=$?
+x1=0; [ "$a$b$c" = 001 ] && [ ! -s "$T/out" ] && [ ! -s "$T/out2" ] \
+  && [ "$HG_FINAL_WHY" = "provider not bound at the end of the health window" ] && x1=1
+setup; gon; fact $FB; fact $FM; hg_health_final; hg_health_final
+di=$(grep -c '^dumpsys input' "$T/calls"); da=$(grep -c '^dumpsys activity' "$T/calls")
+if [ "$x1$di$da" = 111 ] && [ "${_hg_xb:-}/${_hg_xm:-}" = 1/1 ]; then
+  ok health_final_returns_by_variable_and_cross_checks_once
+else bad "health_final_returns_by_variable_and_cross_checks_once ($x1$di$da)"; fi
+
+# Going to a new build, back to the expected one and to the new one again posts nothing.
+hsetup; echo "$OTA" > "$T/fingerprint"; hg_service_main "$T/svc"; a=$(notified | grep -c .)
+: > "$T/calls"; : > "$T/sleeps"; echo "$FP" > "$T/fingerprint"; hg_service_main "$T/svc"
+b=$(notified | grep -c .)
+: > "$T/calls"; : > "$T/sleeps"; echo "$OTA" > "$T/fingerprint"; hg_service_main "$T/svc"
+c=$(notified | grep -c .)
+if [ "$a$b$c" = 000 ] && [ ! -e "$T/data/firmware-notified" ]; then
+  ok firmware_changes_back_and_forth_post_nothing
+else bad "firmware_changes_back_and_forth_post_nothing ($a$b$c)"; fi
 
 echo "passed=$PASS failed=$FAIL"
 [ "$FAIL" = 0 ]

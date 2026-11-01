@@ -68,7 +68,7 @@ final class HnfCoexistence {
         }
         boolean ahead = hnfOnStack(Thread.currentThread().getStackTrace());
         if (ctx == null) {
-            ctx = appContext();
+            ctx = Hidden.currentApplication();
         }
         if (ahead) {
             Logger.i("HyperNotificationFix hooks this process too, ahead of us: standing down."
@@ -94,16 +94,6 @@ final class HnfCoexistence {
             }
         }
         return false;
-    }
-
-    private static Context appContext() {
-        try {
-            Object app = Class.forName("android.app.ActivityThread")
-                    .getMethod("currentApplication").invoke(null);
-            return app instanceof Context ? (Context) app : null;
-        } catch (Throwable t) {
-            return null;
-        }
     }
 
     private static boolean installed(Context ctx) {

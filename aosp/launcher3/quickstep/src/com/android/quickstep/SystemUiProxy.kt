@@ -1433,13 +1433,17 @@ constructor(
         // proxy writes the token, writeIntArray(ids), writeTypedArray(snapshots, 0) and
         // writeBoolean(toHome). Dropping it left the gesture with a dead controller, so it is
         // handled as onAnimationCanceled. 5-7 carry nothing we use (no callers of 6 and 7).
+        // Code 8 and its layout are read from the phone's Shell (HgShellCalls
+        // RUNNER_CANCELED_WITH_TO_HOME, any firmware): read and changed, nothing is parsed by
+        // hand; not readable at all, the known code 8 stays (recentsCancelCode).
         override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
-            if (code == 8) {
+            val hgCancel = HgShellInterfaces.get().recentsCancelCode()
+            if (hgCancel > 0 && code == hgCancel) {
                 data.enforceInterface("com.android.wm.shell.recents.IRecentsAnimationRunner")
                 val ids = data.createIntArray()
                 val snapshots = data.createTypedArray(TaskSnapshot.CREATOR)
                 data.readBoolean() // toHome: AOSP's cancel has no slot for it
-                Log.d("HyperGestures", "IRecentsAnimationRunner: HyperOS cancel (code 8)")
+                Log.d("HyperGestures", "IRecentsAnimationRunner: HyperOS cancel (code $code)")
                 onAnimationCanceled(ids, snapshots)
                 return true
             }

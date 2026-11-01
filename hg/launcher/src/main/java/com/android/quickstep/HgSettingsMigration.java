@@ -11,7 +11,11 @@
 //    key is gone from the code (back haptics follow the system's haptic setting alone), so the
 //    step only clears a stale value. A phone that already ran step n runs only the later ones.
 // Fail-soft: without the permission (WRITE_SECURE_SETTINGS) or on any error nothing changes and
-// the next process tries again (runOnce gives up for this one).
+// the next process tries again (runOnce gives up for this one). The marker moves on only once
+// every due key is gone, so a delete the settings provider refused is retried on the next run.
+// The settings page runs it on its helper thread (runLater): the page shows nothing it writes
+// (the layout picker shows the same layout before the copy, and the dropped switches have no
+// rows), so it needs no result before it draws.
 package com.android.quickstep;
 
 import android.content.ContentResolver;
@@ -19,9 +23,12 @@ import android.content.Context;
 import android.provider.Settings;
 import android.util.Log;
 
+import com.android.launcher3.util.Executors;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Predicate;
 
 public final class HgSettingsMigration {
     private HgSettingsMigration() {}
@@ -85,6 +92,25 @@ public final class HgSettingsMigration {
         if (!sRan) run(context);
     }
 
+    /** Runs the migrations on the helper thread (the settings page, on each opening). */
+    public static void runLater(Context context) {
+        Context app = context.getApplicationContext();
+        Executors.UI_HELPER_EXECUTOR.execute(() -> run(app));
+    }
+
+    /**
+     * Deletes every key of {@code keys} that {@code isSet}, with {@code delete} (false: refused);
+     * returns the keys still set. Empty: all of them are gone, so the marker may move on.
+     */
+    static List<String> deleteAll(String[] keys, Predicate<String> isSet,
+            Predicate<String> delete) {
+        List<String> left = new ArrayList<>();
+        for (String key : keys) {
+            if (isSet.test(key) && !delete.test(key)) left.add(key);
+        }
+        return left;
+    }
+
     /** Runs the migrations; idempotent, writes only what is due. */
     public static void run(Context context) {
         try {
@@ -98,13 +124,17 @@ public final class HgSettingsMigration {
             }
             String[] keys = keysToDelete(Settings.Global.getString(cr, MARKER));
             if (keys.length > 0) {
-                for (String key : keys) {
-                    if (Settings.Global.getString(cr, key) != null) {
-                        Settings.Global.putString(cr, key, null);
-                    }
+                List<String> left = deleteAll(keys,
+                        key -> Settings.Global.getString(cr, key) != null,
+                        key -> Settings.Global.putString(cr, key, null));
+                if (!left.isEmpty()) {
+                    Log.w(TAG, "not deleted: " + String.join(", ", left)
+                            + "; the next run retries");
+                } else if (Settings.Global.putString(cr, MARKER, DONE)) {
+                    Log.i(TAG, "dropped switch keys deleted: " + String.join(", ", keys));
+                } else {
+                    Log.w(TAG, "dropped switch keys deleted, marker not written");
                 }
-                Settings.Global.putString(cr, MARKER, DONE);
-                Log.i(TAG, "dropped switch keys deleted: " + String.join(", ", keys));
             }
             sRan = true;
         } catch (RuntimeException e) { // SecurityException without the permission, or worse

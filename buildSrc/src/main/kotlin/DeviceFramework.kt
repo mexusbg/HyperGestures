@@ -3,6 +3,8 @@ import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.tasks.compile.JavaCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.io.File
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 /** Written into the stub jar by tools/framework-stub/AddInnerClasses.java once it has completed
@@ -47,8 +49,34 @@ private const val INNER_CLASSES_MARKER = "META-INF/hg-innerclasses"
  * device-derived value in the tree comes from (and which the KernelSU module pins the phone to).
  * make-framework-stub.sh writes both; a mismatch means the stub and the checked-out tree describe
  * different firmware.
+ *
+ * Both guards read the 42 MB jar's marker once per build, not once per module (every AOSP module
+ * calls this): the first call records the verified stub in the root project's extra properties.
+ * Per build, not per JVM: a daemon keeps buildSrc's classes across builds, and the stub may have
+ * been regenerated in between.
  */
 fun Project.useDeviceFramework() {
+    val stub = verifiedDeviceFramework()
+    // Built here, not in the action: an action that calls Project.files() holds the Project.
+    val stubFiles = files(stub)
+    dependencies.add("compileOnly", stubFiles)
+    tasks.withType(JavaCompile::class.java).configureEach {
+        doFirst { classpath = stubFiles + classpath }
+    }
+    tasks.withType(KotlinCompile::class.java).configureEach {
+        doFirst { libraries.setFrom(listOf(stub) + libraries.from.toList()) }
+    }
+    tasks.withType(KspAATask::class.java).configureEach {
+        doFirst { kspConfig.libraries.setFrom(listOf(stub) + kspConfig.libraries.from.toList()) }
+    }
+}
+
+private const val VERIFIED_STUB = "hg.deviceFrameworkVerified"
+
+/** prebuilts/device/framework.jar after the marker and device-build checks, run once a build. */
+private fun Project.verifiedDeviceFramework(): File {
+    val extra = rootProject.extensions.extraProperties
+    if (extra.has(VERIFIED_STUB)) return extra.get(VERIFIED_STUB) as File
     val stub = rootProject.file("prebuilts/device/framework.jar")
     val stamp = rootProject.file("tools/framework-stub/device-build.txt")
     val rerun = "re-run tools/framework-stub/make-framework-stub.sh"
@@ -77,14 +105,43 @@ fun Project.useDeviceFramework() {
                 "matching device files, or check out the tree for that build"
         )
     }
-    dependencies.add("compileOnly", files(stub))
-    tasks.withType(JavaCompile::class.java).configureEach {
-        doFirst { classpath = files(stub) + classpath }
+    extra.set(VERIFIED_STUB, stub)
+    return stub
+}
+
+/** A `fingerprint=`-style `key=` value of tools/framework-stub/device-build.txt, or null. */
+private fun stampValue(text: String, key: String): String? =
+    text.lineSequence().map { it.trim() }.firstOrNull { it.startsWith("$key=") }
+        ?.removePrefix("$key=")?.trim()?.takeIf { it.isNotEmpty() }
+
+/**
+ * Fails unless [frameworkRes] (prebuilts/device/framework-res.apk) is the file
+ * make-framework-stub.sh recorded in [deviceBuild] (`framework-res.apk.sha256=`): the private
+ * resource IDs the release dex may inline are checked against it (privateResIdCheck), so another
+ * firmware's copy would check them against the wrong numbers. Plain values only (Files), so a task
+ * action can call it without capturing a build script.
+ */
+fun verifyDeviceFrameworkRes(frameworkRes: File, deviceBuild: File) {
+    val rerun = "re-run tools/framework-stub/make-framework-stub.sh with that build's device files"
+    val stamp = if (deviceBuild.isFile) deviceBuild.readText() else ""
+    val want = stampValue(stamp, "framework-res.apk.sha256")?.lowercase()
+        ?: throw GradleException("$deviceBuild has no framework-res.apk.sha256= line — $rerun")
+    if (!frameworkRes.isFile) throw GradleException("Missing $frameworkRes — $rerun")
+    val digest = MessageDigest.getInstance("SHA-256")
+    frameworkRes.inputStream().use { input ->
+        val buf = ByteArray(1 shl 16)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            digest.update(buf, 0, n)
+        }
     }
-    tasks.withType(KotlinCompile::class.java).configureEach {
-        doFirst { libraries.setFrom(listOf(stub) + libraries.from.toList()) }
-    }
-    tasks.withType(KspAATask::class.java).configureEach {
-        doFirst { kspConfig.libraries.setFrom(listOf(stub) + kspConfig.libraries.from.toList()) }
+    val got = digest.digest().joinToString("") { "%02x".format(it) }
+    if (got != want) {
+        throw GradleException(
+            "$frameworkRes has sha256 $got, but $deviceBuild records $want for the device " +
+                "build the tree comes from: a framework-res.apk from other firmware (or a " +
+                "stale copy) — $rerun"
+        )
     }
 }

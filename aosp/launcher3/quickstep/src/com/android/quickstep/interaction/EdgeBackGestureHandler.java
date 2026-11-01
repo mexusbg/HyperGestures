@@ -74,12 +74,14 @@ public class EdgeBackGestureHandler implements OnTouchListener {
     private final EdgeBackGesturePanel.BackCallback mBackCallback =
             new EdgeBackGesturePanel.BackCallback() {
                 @Override
-                public void triggerBack() {
+                public boolean triggerBack() {
+                    // HyperGestures: whether the callback sent back (hgOnBackCompleted).
                     if (mGestureCallback != null) {
-                        mGestureCallback.onBackGestureAttempted(mEdgeBackPanel.getIsLeftPanel()
+                        return mGestureCallback.hgOnBackCompleted(mEdgeBackPanel.getIsLeftPanel()
                                 ? BackGestureResult.BACK_COMPLETED_FROM_LEFT
                                 : BackGestureResult.BACK_COMPLETED_FROM_RIGHT);
                     }
+                    return true;
                 }
 
                 @Override
@@ -166,6 +168,7 @@ public class EdgeBackGestureHandler implements OnTouchListener {
 
     private boolean isWithinTouchRegion(int x, int y) {
         // Disallow if too far from the edge
+        // HyperGestures: each side's own width (mEdgeWidthLeft / mEdgeWidthRight).
         if (x > mEdgeWidthLeft + mLeftInset
                 && x < (mDisplaySize.x - mEdgeWidthRight - mRightInset)) {
             mDisallowedGestureReason = BackGestureResult.BACK_NOT_STARTED_TOO_FAR_FROM_EDGE;
@@ -193,6 +196,7 @@ public class EdgeBackGestureHandler implements OnTouchListener {
     private void onMotionEvent(MotionEvent ev) {
         int action = ev.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
+            // HyperGestures: the left side's own width (mEdgeWidthLeft).
             boolean isOnLeftEdge = ev.getX() <= mEdgeWidthLeft + mLeftInset;
             mDisallowedGestureReason = BackGestureResult.UNKNOWN;
             mAllowGesture = isWithinTouchRegion((int) ev.getX(), (int) ev.getY());
@@ -259,6 +263,15 @@ public class EdgeBackGestureHandler implements OnTouchListener {
     interface BackGestureAttemptCallback {
         /** Called whenever any touch is completed. */
         void onBackGestureAttempted(BackGestureResult result);
+
+        /**
+         * HyperGestures: a completed back gesture (BACK_COMPLETED_*). @return whether back was
+         * sent; false makes the arrow leave as on a cancel, with no commit tick or animation.
+         */
+        default boolean hgOnBackCompleted(BackGestureResult result) {
+            onBackGestureAttempted(result);
+            return true;
+        }
 
         /** Called when the back gesture is recognized and is in progress. */
         default void onBackGestureProgress(float diffx, float diffy, boolean isLeftGesture) {}

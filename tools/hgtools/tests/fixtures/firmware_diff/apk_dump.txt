@@ -1,0 +1,4 @@
+000110: 7100 0000 0000  |0000: invoke-static {}, Landroid/app/ActivityTaskManager;.getService:()Landroid/app/IActivityTaskManager; // method@0000
+000116: 6e20 0100 1000  |0003: invoke-virtual {v0, v1}, Landroid/app/ActivityTaskManager;.removeTask:(I)Z // method@0001
+00011c: 5210 0000       |0006: iget v0, v1, Landroid/app/ActivityTaskManager;.mHidden:I // field@0000
+000122: 6e10 0300 0000  |0008: invoke-virtual {v0}, Ljava/lang/Object;.hashCode:()I // method@0003

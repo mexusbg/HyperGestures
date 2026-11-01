@@ -62,6 +62,31 @@ public class HgLayoutPreviewTest {
         }
     }
 
+    /** The view's reused cards hold exactly a fresh frame, whatever they held before. */
+    @Test public void reusedCardsMatchFreshFrames() {
+        HgLayoutPreview.Card[] reused = HgLayoutPreview.newCards();
+        int[] modes = {HgLayoutPreview.STACK, HgLayoutPreview.VERTICAL, HgLayoutPreview.STACK,
+                HgLayoutPreview.HORIZONTAL};
+        for (float t = 0; t < 1; t += 0.03f) {
+            for (int mode : modes) {
+                int n = HgLayoutPreview.frame(mode, t, reused);
+                List<HgLayoutPreview.Card> fresh = HgLayoutPreview.frame(mode, t);
+                assertEquals(fresh.size(), n);
+                for (int i = 0; i < n; i++) {
+                    HgLayoutPreview.Card a = fresh.get(i);
+                    HgLayoutPreview.Card b = reused[i];
+                    assertEquals(a.x, b.x, EPS);
+                    assertEquals(a.y, b.y, EPS);
+                    assertEquals(a.w, b.w, EPS);
+                    assertEquals(a.h, b.h, EPS);
+                    assertEquals(a.alpha, b.alpha, EPS);
+                    assertEquals(a.z, b.z, EPS);
+                    if (i > 0) assertTrue("back to front", reused[i - 1].z <= b.z);
+                }
+            }
+        }
+    }
+
     @Test public void modeFromSetting() {
         assertEquals(HgLayoutPreview.VERTICAL, HgLayoutPreview.mode("0"));
         assertEquals(HgLayoutPreview.HORIZONTAL, HgLayoutPreview.mode("1"));

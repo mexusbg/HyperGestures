@@ -36,3 +36,8 @@
 -keepclassmembers class com.android.quickstep.interaction.EdgeBackOverlay$Root {
     protected void onChildVisibilityChanged(android.view.View, int, int);
 }
+
+# HgShellInterfaces compares the Shell AIDL codes compiled into this APK with the phone's Shell
+# (after an OTA). The generated Stubs' TRANSACTION_ constants are only read through reflection,
+# so R8 strips them otherwise and the check would compare nothing.
+-keepclassmembers class com.android.wm.shell.**$Stub { static final int TRANSACTION_*; }

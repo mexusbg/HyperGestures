@@ -76,8 +76,15 @@ constructor(
     private val backgroundRelativeLtrLocation = Rect()
     private val backgroundAnimationRectEvaluator = RectEvaluator(backgroundRelativeLtrLocation)
 
-    // HyperGestures: icon and name above the card, no menu (HgTaskHeader).
+    // HyperGestures: icon and name above the card, no menu (HgTaskHeader). Read once, as the chip
+    // inflates (its styling depends on it); the card's taps and menu follow this snapshot
+    // (isHgHeader), not the live setting, so a toggle while recents is alive can't leave a header
+    // that taps go home through, or a card with no menu at all.
     private val hgHeader = com.android.quickstep.HgTaskHeader.isOn(context)
+
+    /** HyperGestures: whether this chip is the header (hgHeader's snapshot). */
+    val isHgHeader: Boolean
+        get() = hgHeader
 
     // Menu dimensions
     private val collapsedMenuDefaultWidth: Int =

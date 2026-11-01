@@ -47,6 +47,13 @@ public final class NotifSetting {
     /** The scopes hooked so far this boot, in order (NotifKeys.hookedValue); guarded by itself. */
     private static final Set<String> sScopes = new LinkedHashSet<>();
 
+    /**
+     * Serializes the mark's writers (the hg-notif-hooked threads only), so the last write carries
+     * every scope. Not the class monitor: {@link #watch} takes that from the hooks, which must
+     * never wait on this binder write.
+     */
+    private static final Object WRITE_LOCK = new Object();
+
     private static volatile boolean sOn;
     private static volatile boolean sWatching;
 
@@ -94,23 +101,25 @@ public final class NotifSetting {
         }
     }
 
-    private static synchronized void writeHooked(ContentResolver cr) {
-        try {
-            String bootId = bootId();
-            List<String> scopes;
-            synchronized (sScopes) {
-                scopes = new ArrayList<>(sScopes);
+    private static void writeHooked(ContentResolver cr) {
+        synchronized (WRITE_LOCK) {
+            try {
+                String bootId = bootId();
+                List<String> scopes;
+                synchronized (sScopes) {
+                    scopes = new ArrayList<>(sScopes);
+                }
+                String value = bootId == null ? null : NotifKeys.hookedValue(bootId, scopes);
+                if (bootId == null) {
+                    Logger.i("hooked mark not written: boot id unreadable");
+                } else if (Settings.Global.putString(cr, NotifKeys.HOOKED_KEY, value)) {
+                    Logger.i("hooked mark written for this boot: " + scopes);
+                } else {
+                    Logger.i("hooked mark not written: the settings provider refused it");
+                }
+            } catch (Throwable t) {
+                Logger.w("hooked mark not written", t);
             }
-            String value = bootId == null ? null : NotifKeys.hookedValue(bootId, scopes);
-            if (bootId == null) {
-                Logger.i("hooked mark not written: boot id unreadable");
-            } else if (Settings.Global.putString(cr, NotifKeys.HOOKED_KEY, value)) {
-                Logger.i("hooked mark written for this boot: " + scopes);
-            } else {
-                Logger.i("hooked mark not written: the settings provider refused it");
-            }
-        } catch (Throwable t) {
-            Logger.w("hooked mark not written", t);
         }
     }
 
@@ -180,20 +189,15 @@ public final class NotifSetting {
      * (createPackageContext("com.miui.aod") inside SystemUI), whose resolver would carry the
      * wrong package for our uid.
      */
-    private static Context processContext(Context hookContext) {
-        try {
-            Object app = Class.forName("android.app.ActivityThread")
-                    .getMethod("currentApplication").invoke(null);
-            if (app instanceof Context) {
-                return (Context) app;
-            }
-        } catch (Throwable t) {
-            Logger.v("currentApplication unavailable: " + t);
+    static Context processContext(Context hookContext) {
+        Context app = Hidden.currentApplication();
+        if (app != null) {
+            return app;
         }
         if (hookContext == null) {
             return null;
         }
-        Context app = hookContext.getApplicationContext();
+        app = hookContext.getApplicationContext();
         return app != null ? app : hookContext;
     }
 }

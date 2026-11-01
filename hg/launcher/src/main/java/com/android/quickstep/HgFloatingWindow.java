@@ -16,6 +16,8 @@
 // options), as AOSP's own freeform task-menu item does. Without the MIUI class the entry is hidden.
 package com.android.quickstep;
 
+import static com.android.launcher3.util.Executors.UI_HELPER_EXECUTOR;
+
 import android.app.ActivityOptions;
 import android.content.Context;
 import android.util.Log;
@@ -99,7 +101,11 @@ final class HgFloatingWindow {
         if (m == null || packageName == null) return false;
         try {
             boolean ok = Boolean.TRUE.equals(m.invoke(null, context, packageName));
-            if (!ok && explainOnce(packageName)) logWhyNot(context, packageName);
+            if (!ok && explainOnce(packageName)) {
+                // Off the caller's thread: the corner drag asks on the main thread mid-swipe.
+                Context app = context.getApplicationContext();
+                UI_HELPER_EXECUTOR.execute(() -> logWhyNot(app, packageName));
+            }
             return ok;
         } catch (Throwable t) {
             logFailureOnce("MiuiMultiWindowUtils.packageSupportFreeform failed", t);
@@ -113,7 +119,7 @@ final class HgFloatingWindow {
 
     /**
      * Logs HyperOS's individual floating-window checks for a package it refused: 5 reflective
-     * calls, one of them a black-list build, so once per package per process.
+     * calls, one of them a black-list build, so once per package per process, in the background.
      */
     private static void logWhyNot(Context context, String pkg) {
         StringBuilder sb = new StringBuilder("floating refused for ").append(pkg).append(':');

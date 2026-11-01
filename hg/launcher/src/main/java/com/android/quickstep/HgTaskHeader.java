@@ -5,7 +5,8 @@
 // header opens the app's App info (owner, 2026-10-09); the header sits above the card, outside the
 // card's touch area, so RecentsView routes the tap here (containerAt / openAppInfo). The title is
 // white with a soft shadow, readable over the blurred background. Off:
-// Settings.Global hypergestures_recents_header=0 (AOSP's chip and menu), read as cards inflate.
+// Settings.Global hypergestures_recents_header=0 (AOSP's chip and menu), read as cards inflate;
+// each card keeps that snapshot (IconAppChipView.isHgHeader) for its taps and menu.
 package com.android.quickstep;
 
 import android.content.Context;
@@ -22,6 +23,7 @@ import androidx.annotation.Nullable;
 import com.android.launcher3.R;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.popup.SystemShortcut;
+import com.android.quickstep.views.IconAppChipView;
 import com.android.quickstep.views.RecentsView;
 import com.android.quickstep.views.RecentsViewContainer;
 import com.android.quickstep.views.TaskContainer;
@@ -132,26 +134,36 @@ public final class HgTaskHeader {
                 + GAP_DP * chip.getResources().getDisplayMetrics().density);
     }
 
-    /** Header room above the cards, in px at scale 1: kept out of RecentsView's tap-to-go-home. */
-    public static int touchRoom(Context context) {
-        return isOn(context) ? Math.round(64 * context.getResources().getDisplayMetrics().density)
-                : 0;
+    /** The header's touch room above a card, in dp. */
+    static final float TOUCH_ROOM_DP = 64;
+
+    /**
+     * Header room above the cards, in px at scale 1: kept out of RecentsView's tap-to-go-home.
+     * {@code headerOn}: the cards' own snapshot (TaskView.hgHasHeader), not the live setting.
+     */
+    public static int touchRoom(Resources res, boolean headerOn) {
+        return headerOn ? Math.round(TOUCH_ROOM_DP * res.getDisplayMetrics().density) : 0;
     }
 
     /**
      * The card whose header is under ({@code contentX}, {@code y}) in {@code rv}'s content
      * coordinates (view x plus scroll), or null. Only lifted headers count; a header still on its
-     * card (landscape, a split card's second app) gets its touches through the card.
+     * card (landscape, a split card's second app) gets its touches through the card. Each chip's
+     * own header snapshot decides (IconAppChipView.isHgHeader), not the setting, which is not
+     * read again on every touch.
      */
     @Nullable
     public static TaskContainer containerAt(RecentsView<?, ?> rv, float contentX, float y) {
-        if (!isOn(rv.getContext())) return null;
-        float[] corner = new float[2];
+        float[] corner = null;
         for (TaskView taskView : rv.getTaskViews()) {
             if (taskView.getVisibility() != View.VISIBLE || taskView.getAlpha() == 0f) continue;
             for (TaskContainer container : taskView.getTaskContainers()) {
-                View chip = container.getIconView();
-                if (chip.getVisibility() != View.VISIBLE || chip.getTranslationY() >= 0f) continue;
+                IconAppChipView chip = container.getIconView();
+                if (!takesTap(chip.isHgHeader(), chip.getVisibility() == View.VISIBLE,
+                        chip.getTranslationY())) {
+                    continue;
+                }
+                if (corner == null) corner = new float[2];
                 corner[0] = 0f;
                 corner[1] = 0f;
                 Utilities.getDescendantCoordRelativeToAncestor(chip, rv, corner, false);
@@ -168,6 +180,14 @@ public final class HgTaskHeader {
             }
         }
         return null;
+    }
+
+    /**
+     * Whether a card's chip takes a tap as its header: a header (the chip's snapshot), shown, and
+     * lifted above the card (a header still on its card gets its touches through the card).
+     */
+    static boolean takesTap(boolean isHeader, boolean visible, float translationY) {
+        return isHeader && visible && translationY < 0f;
     }
 
     /**

@@ -279,12 +279,7 @@ constructor(
         }
         // The raw tasks are given in most-recent to least-recent order, we need to reverse it
         rawTasks.reverse()
-        // HyperGestures: HyperOS's Shell can return null entries in the list (seen right after a
-        // task is removed); AOSP assumes none and crashes in isBaseType below.
-        // (Through a nullable-element view: a lambda over GroupedTaskInfo would get Kotlin's
-        // parameter null check and throw on exactly the entry it should drop.)
-        @Suppress("UNCHECKED_CAST")
-        (rawTasks as MutableList<GroupedTaskInfo?>).removeAll { it == null }
+        // HyperGestures: HyperOS's null entries are already gone (SystemUiProxy.getRecentTasks).
 
         val tmpLockedUsers =
             object : SparseBooleanArray() {
@@ -385,6 +380,8 @@ constructor(
         keyOnly: Boolean,
         lockedUsers: SparseBooleanArray,
     ): Task? {
+        // HyperGestures: no card for a task recents must not show (HgRecentsTaskPolicy: the home
+        // app, recents itself, an App info screen opened on its own): null, the callers skip it.
         if (!HgRecentsTaskPolicy.showInOverview(
                 taskInfo.topActivityType,
                 taskInfo.baseIntent?.hasCategory(Intent.CATEGORY_HOME) == true,

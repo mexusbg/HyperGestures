@@ -8,11 +8,11 @@
 // onRootTaskAppeared skip setAdjacentRoots when SoScUtils.isSoScSupported()), so a pair started
 // through ISplitScreen does not lay out as split screen; MiuiHome starts splits through SoSc.
 //
-// ISoScSplitScreen has no AIDL here: HgSoScSplitScreen writes its transaction codes and parcels
-// as one HyperOS build's generated proxy does. A later build may renumber them, and a oneway call
-// with a stale code silently runs whatever Shell method now has it, so SoSc is used only on the
-// build the APK was made for (HgBuildConfig.EXPECTED_FINGERPRINT) and only if the binder names
-// the expected interface.
+// ISoScSplitScreen has no AIDL here: HgSoScSplitScreen writes its parcels as the generated proxy
+// does. A later build may renumber or change them, and a oneway call with a stale code silently
+// runs whatever Shell method now has it, so SoSc is used only when the phone's own Shell code
+// confirmed every call's code and parameters (HgShellCalls, read by HgShellInterfaces; any
+// firmware) and the binder names the expected interface.
 package com.android.quickstep;
 
 public final class HgSplitRoutePolicy {
@@ -34,16 +34,14 @@ public final class HgSplitRoutePolicy {
     /**
      * Whether SystemUI's ISoScSplitScreen binder may be used at all.
      *
-     * @param deviceFingerprint the phone's Build.FINGERPRINT
-     * @param expectedFingerprint the build the transaction codes were taken from
-     *     (HgBuildConfig.EXPECTED_FINGERPRINT)
+     * @param callsConfirmed the phone's Shell confirmed every SoSc call (HgShellCalls.Feature
+     *     SOSC_SPLIT)
      * @param descriptor the binder's interface descriptor, or null if it could not be read
-     * @param expectedDescriptor the descriptor the pinned proxy writes as its interface token
+     * @param expectedDescriptor the descriptor HgSoScSplitScreen writes as its interface token
      */
-    public static boolean soscBinderUsable(String deviceFingerprint, String expectedFingerprint,
-            String descriptor, String expectedDescriptor) {
-        return expectedFingerprint != null && !expectedFingerprint.isEmpty()
-                && expectedFingerprint.equals(deviceFingerprint)
-                && expectedDescriptor != null && expectedDescriptor.equals(descriptor);
+    public static boolean soscBinderUsable(boolean callsConfirmed, String descriptor,
+            String expectedDescriptor) {
+        return callsConfirmed && expectedDescriptor != null
+                && expectedDescriptor.equals(descriptor);
     }
 }

@@ -14,7 +14,9 @@ import android.graphics.drawable.Icon;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Access to framework methods that exist at runtime but are hidden from the public
@@ -28,6 +30,15 @@ final class Hidden {
     private static Method notificationSetSmallIcon;
     private static Method sbnGetPackageContext;
     private static boolean resolved;
+
+    /** ActivityThread.currentApplication(), looked up once; null when unavailable. */
+    private static volatile Method currentApplication;
+    private static volatile boolean currentApplicationResolved;
+
+    /** Fields by class and name, found walking up the hierarchy; {@link #MISSING} if absent. */
+    private static final ConcurrentHashMap<Class<?>, ConcurrentHashMap<String, Object>> FIELDS =
+            new ConcurrentHashMap<>();
+    private static final Object MISSING = new Object();
 
     private Hidden() {
     }
@@ -94,6 +105,91 @@ final class Hidden {
             return c instanceof Context ? (Context) c : fallback;
         } catch (Throwable t) {
             return fallback;
+        }
+    }
+
+    /**
+     * HyperGestures: the process's Application ({@code ActivityThread.currentApplication()}), or
+     * null before it is bound or when the lookup is unavailable. One lookup per process.
+     */
+    static Context currentApplication() {
+        if (!currentApplicationResolved) {
+            try {
+                currentApplication = Class.forName("android.app.ActivityThread")
+                        .getMethod("currentApplication");
+            } catch (Throwable t) {
+                Logger.v("currentApplication unavailable: " + t);
+            }
+            currentApplicationResolved = true;
+        }
+        Method m = currentApplication;
+        if (m == null) {
+            return null;
+        }
+        try {
+            Object app = m.invoke(null);
+            return app instanceof Context ? (Context) app : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** HyperGestures: SystemUI's own context ({@code ActivityThread.getSystemUiContext()}). */
+    static Context systemUiContext() {
+        try {
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            Method current = at.getMethod("currentActivityThread");
+            Method get = at.getDeclaredMethod("getSystemUiContext");
+            get.setAccessible(true);
+            Object v = get.invoke(current.invoke(null));
+            return v instanceof Context ? (Context) v : null;
+        } catch (Throwable t) {
+            Logger.v("ActivityThread context lookup failed: " + t);
+            return null;
+        }
+    }
+
+    /**
+     * HyperGestures: a (possibly private or synthetic) field by name, walking up from {@code c};
+     * null when there is none. Cached per class, so hooks that run per notification reflect once.
+     */
+    static Field field(Class<?> c, String name) {
+        ConcurrentHashMap<String, Object> byName =
+                FIELDS.computeIfAbsent(c, k -> new ConcurrentHashMap<>());
+        Object f = byName.get(name);
+        if (f == null) {
+            f = MISSING;
+            for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+                try {
+                    Field found = k.getDeclaredField(name);
+                    found.setAccessible(true);
+                    f = found;
+                    break;
+                } catch (NoSuchFieldException e) {
+                    // Keep walking up.
+                } catch (Throwable t) {
+                    break;
+                }
+            }
+            byName.put(name, f);
+        }
+        return f instanceof Field ? (Field) f : null;
+    }
+
+    /** HyperGestures: reads {@link #field}; null when absent, unreadable or not a {@code type}. */
+    static <T> T readField(Object target, String name, Class<T> type) {
+        if (target == null) {
+            return null;
+        }
+        Field f = field(target.getClass(), name);
+        if (f == null) {
+            return null;
+        }
+        try {
+            Object v = f.get(target);
+            return type.isInstance(v) ? type.cast(v) : null;
+        } catch (Throwable t) {
+            return null;
         }
     }
 }

@@ -13,8 +13,6 @@ package com.android.quickstep;
 
 import android.util.Log;
 
-import androidx.annotation.Nullable;
-
 import com.android.launcher3.statehandlers.DepthController;
 import com.android.launcher3.util.ListenableRef;
 import com.android.quickstep.fallback.RecentsState;
@@ -85,11 +83,6 @@ public final class HgRecentsDepthController extends DepthController<RecentsState
     /** RecentsActivity.onDestroy: forgets this controller. */
     public void onDestroy() {
         if (sCurrent.get() == this) sCurrent.clear();
-    }
-
-    @Nullable
-    static HgRecentsDepthController current() {
-        return sCurrent.get();
     }
 
     /** Recents opens: the owner's blur switch as it is now (HgBlurSupport.refreshRecentsBlur). */

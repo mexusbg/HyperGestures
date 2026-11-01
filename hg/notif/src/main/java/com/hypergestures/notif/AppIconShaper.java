@@ -21,10 +21,11 @@ import android.graphics.RectF;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.os.UserHandle;
+import android.util.LruCache;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Produces the notification header's app icon: the app's own icon, clipped to the mask we choose.
@@ -92,7 +93,31 @@ final class AppIconShaper {
     /** Edge of a refitted adaptive foreground, as a fraction of the icon edge. */
     private static final float FIT_SCALE = 0.72f;
 
-    private static final ConcurrentHashMap<String, Drawable> MASKED = new ConcurrentHashMap<>();
+    /**
+     * HyperGestures: what the masked-icon cache may hold, in bytes. A masked icon is 201x201
+     * ARGB, ~158 KB, so this keeps the icons of the ~25 most recent apps.
+     */
+    private static final int MASKED_BUDGET = 4 * 1024 * 1024;
+
+    /** HyperGestures: the cost of remembering "nothing better" for an app. */
+    private static final int NONE_SIZE = 64;
+
+    /** HyperGestures: cached for an app with nothing better than what the system produced. */
+    private static final Object NONE = new Object();
+
+    /**
+     * HyperGestures: masked bitmaps (or {@link #NONE}) by {@code user:package:mask}. A holder
+     * class, so the cache (an Android class) is only built on first use, never in unit tests.
+     */
+    private static final class Masked {
+        static final LruCache<String, Object> CACHE = new LruCache<String, Object>(MASKED_BUDGET) {
+            @Override
+            protected int sizeOf(String key, Object value) {
+                return value instanceof Bitmap
+                        ? ((Bitmap) value).getAllocationByteCount() : NONE_SIZE;
+            }
+        };
+    }
 
     private AppIconShaper() {
     }
@@ -101,17 +126,34 @@ final class AppIconShaper {
      * @param circle true for a circular mask (matching the conversation avatars and system rows),
      *     false for the platform icon shape (matching launcher icons)
      * @return a masked icon, or null when we have nothing better than what the system produced, in
-     *     which case the caller must leave the original result untouched
+     *     which case the caller must leave the original result untouched. HyperGestures: a new
+     *     drawable per call over the cached bitmap, so one view's alpha, tint, bounds or callback
+     *     never reaches another (shade rows and AOD views share cache entries).
      */
     static Drawable maskedFor(Context ctx, String pkg, int userId, boolean circle) {
-        String key = userId + ":" + pkg + (circle ? ":circle" : ":shape");
-        Drawable cached = MASKED.get(key);
-        if (cached != null) {
-            return cached;
+        if (ctx == null || pkg == null) {
+            return null;
         }
+        PackageWatcher.ensure(ctx);
+        String key = userId + ":" + pkg + (circle ? ":circle" : ":shape");
+        Object cached = Masked.CACHE.get(key);
+        if (cached == null) {
+            cached = build(ctx, pkg, userId, circle);
+            Masked.CACHE.put(key, cached);
+        }
+        return cached instanceof Bitmap
+                ? new BitmapDrawable(Resources.getSystem(), (Bitmap) cached) : null;
+    }
+
+    /**
+     * Builds the masked icon, or {@link #NONE}. HyperGestures: a failed lookup is remembered too,
+     * so a bind does not repeat the binder calls and the decode; {@link PackageWatcher} drops it
+     * when the app is installed, updated or changed.
+     */
+    private static Object build(Context ctx, String pkg, int userId, boolean circle) {
         Drawable raw = appIcon(ctx, pkg, userId, circle);
         if (raw == null) {
-            return null;
+            return NONE;
         }
 
         Bitmap out = Bitmap.createBitmap(MASKED_SIZE, MASKED_SIZE, Bitmap.Config.ARGB_8888);
@@ -125,17 +167,41 @@ final class AppIconShaper {
             how = drawLegacy(canvas, raw, circle, pkg);
             if (how == null) {
                 canvas.restore();
-                return null;
+                return NONE;
             }
         }
         canvas.restore();
 
-        Drawable result = new BitmapDrawable(Resources.getSystem(), out);
-        MASKED.put(key, result);
+        out = badged(ctx, out, userId, pkg);
         Bitmaps.dump(pkg + "-app-out", out);
         Logger.i("masked(" + pkg + "): " + how + " clipped to "
                 + (circle ? "circle" : "platform icon shape") + " at " + MASKED_SIZE + "px");
-        return result;
+        return out;
+    }
+
+    /**
+     * HyperGestures: adds the profile badge (the work profile's briefcase, for instance) that the
+     * system's own icon carries for an app of another user, and that replacing the icon would
+     * otherwise drop. It is drawn into the cached bitmap, so this runs once per app and user; the
+     * main user (0) is never badged and costs no lookup.
+     */
+    private static Bitmap badged(Context ctx, Bitmap masked, int userId, String pkg) {
+        if (userId <= 0) {
+            return masked;
+        }
+        try {
+            Drawable plain = new BitmapDrawable(Resources.getSystem(), masked);
+            Drawable badged = ctx.getPackageManager()
+                    .getUserBadgedIcon(plain, UserHandle.of(userId));
+            if (badged == null || badged == plain) {
+                return masked;
+            }
+            Bitmap out = Bitmaps.pixels(badged, MASKED_SIZE);
+            return out != null ? out : masked;
+        } catch (Throwable t) {
+            Logger.v("badge(" + pkg + ", user " + userId + ") failed: " + t);
+            return masked;
+        }
     }
 
     /**
@@ -265,7 +331,9 @@ final class AppIconShaper {
      * @return a short description of the path taken, or null if the artwork was unusable
      */
     private static String drawLegacy(Canvas canvas, Drawable raw, boolean circle, String pkg) {
-        Bitmap art = Bitmaps.trim(Bitmaps.pixels(raw, MASKED_SIZE));
+        // HyperGestures: at most twice the output edge, enough detail to scale a trimmed logo up
+        // from without rendering a huge legacy PNG or vector at full size.
+        Bitmap art = Bitmaps.trim(Bitmaps.pixels(raw, MASKED_SIZE * 2));
         if (art == null || art.getWidth() <= 0 || art.getHeight() <= 0) {
             Logger.v("legacy(" + pkg + "): nothing visible in the icon, leaving it alone");
             return null;
@@ -292,10 +360,17 @@ final class AppIconShaper {
                 + " coverage=" + Math.round(coverage * 100) + "%";
     }
 
-    /** Drops cached icons for a package, so an app update is picked up. */
-    static void forget(String pkg, int userId) {
-        String prefix = userId + ":" + pkg;
-        MASKED.keySet().removeIf(k -> k.startsWith(prefix));
+    /**
+     * Drops cached icons for a package in every user, so an app update is picked up.
+     * HyperGestures: called by {@link PackageWatcher}.
+     */
+    static void forget(String pkg) {
+        String part = ":" + pkg + ":";
+        for (String k : Masked.CACHE.snapshot().keySet()) {
+            if (k.contains(part)) {
+                Masked.CACHE.remove(k);
+            }
+        }
     }
 
     /**
@@ -307,9 +382,6 @@ final class AppIconShaper {
      * mask, so it survives the clip better than the square one.
      */
     private static Drawable appIcon(Context ctx, String pkg, int userId, boolean circle) {
-        if (ctx == null) {
-            return null;
-        }
         try {
             PackageManager pm = ctx.getPackageManager();
             ApplicationInfo ai = appInfo(pm, pkg, userId);

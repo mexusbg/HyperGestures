@@ -31,6 +31,8 @@ public final class HgEdgeBack {
         EdgeBackOverlay overlay;
         EdgeBackGestureHandler handler;
         final Point size = new Point();
+        /** The density the handler's and panel's px values (slop, bar height, size) are for. */
+        int densityDpi;
     }
 
     private static final String TAG = "HgEdgeBack";
@@ -97,8 +99,11 @@ public final class HgEdgeBack {
                 return null;
             }
 
+            // Rebuilt on a new size or density ("Display size"): the handler and panel take their
+            // px values (touch slop, bottom gesture height, panel size) once, as they are built.
+            int densityDpi = ctx.getResources().getConfiguration().densityDpi;
             pd = sDisplays.get(displayId);
-            if (pd == null || pd.size.x != w || pd.size.y != h) {
+            if (pd == null || pd.size.x != w || pd.size.y != h || pd.densityDpi != densityDpi) {
                 if (pd != null) {
                     sDisplays.remove(displayId);
                     teardown(pd);
@@ -110,6 +115,7 @@ public final class HgEdgeBack {
                 settingUp = true;
                 pd = new PerDisplay();
                 pd.size.set(w, h);
+                pd.densityDpi = densityDpi;
                 pd.overlay = new EdgeBackOverlay(ctx, displayId);
                 ViewGroup root = pd.overlay.root();
                 pd.handler = new EdgeBackGestureHandler(ctx, dp);

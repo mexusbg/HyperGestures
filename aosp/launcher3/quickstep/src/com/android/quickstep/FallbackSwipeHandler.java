@@ -280,19 +280,9 @@ public class FallbackSwipeHandler extends
         }
         // The currentShift is already interpolated by the magnetic swipe detach effect
         float currentShift = getCurrentShiftValue();
-        setHomeScaleAndAlpha(
-                builder,
-                app,
-                currentShift,
-                mRunningOverHome
-                        ? Utilities.mapBoundToRange(
-                                currentShift,
-                                /* lowerBound= */ 0f,
-                                /* upperBound= */ mDragLengthFactor,
-                                /* toMin= */ 1f,
-                                /* toMax= */ HOME_SWIPE_UP_ALPHA,
-                                /* interpolator= */ HOME_SWIPE_UP_INTERPOLATOR)
-                        : 0f);
+        // HyperGestures: not over the home app here (returned above), so AOSP's
+        // mRunningOverHome ? <HOME_SWIPE_UP_ALPHA fade> : 0f is always 0f.
+        setHomeScaleAndAlpha(builder, app, currentShift, 0f);
     }
 
     private void setHomeScaleAndAlpha(

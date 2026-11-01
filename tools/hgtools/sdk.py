@@ -26,18 +26,23 @@ def _version_key(name: str):
         return None
 
 
-def find_aapt2(root: Path) -> Path:
-    """$AAPT2 if set, else aapt2 from the SDK's newest build-tools that has one."""
-    if os.environ.get("AAPT2"):
-        return Path(os.environ["AAPT2"])
+def find_build_tool(root: Path, env_var: str, names: tuple[str, ...]) -> Path:
+    """$env_var if set, else the first of names in the SDK's newest build-tools that has one."""
+    if os.environ.get(env_var):
+        return Path(os.environ[env_var])
     sdk = sdk_dir(root)
     if sdk is not None:
         versions = [(key, d) for d in (sdk / "build-tools").glob("*")
                     if d.is_dir() and (key := _version_key(d.name)) is not None]
         for _, d in sorted(versions, reverse=True):
-            for exe in ("aapt2.exe", "aapt2"):
+            for exe in names:
                 if (d / exe).is_file():
                     return d / exe
     raise FileNotFoundError(
-        "aapt2 not found: set AAPT2, or the SDK via local.properties sdk.dir / ANDROID_HOME, "
-        "with build-tools installed")
+        f"{names[-1]} not found: set {env_var}, or the SDK via local.properties sdk.dir / "
+        "ANDROID_HOME, with build-tools installed")
+
+
+def find_aapt2(root: Path) -> Path:
+    """$AAPT2 if set, else aapt2 from the SDK's newest build-tools that has one."""
+    return find_build_tool(root, "AAPT2", ("aapt2.exe", "aapt2"))

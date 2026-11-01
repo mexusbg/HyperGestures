@@ -587,6 +587,14 @@ public final class HgLogCollector {
         sb.append("boot id: ").append(String.valueOf(bootId())).append('\n');
         sb.append("HOME: ").append(home(context)).append('\n');
         sb.append("our pids: ").append(pids).append('\n');
+        // The HyperOS binder calls this firmware takes, as the phone's Shell code says.
+        try {
+            sb.append("built against: ")
+                    .append(com.hypergestures.HgBuildConfig.EXPECTED_FINGERPRINT).append('\n');
+            sb.append("\nShell interfaces:\n").append(HgShellInterfaces.report()).append('\n');
+        } catch (RuntimeException | LinkageError e) {
+            sb.append("\nShell interfaces: unreadable (").append(e).append(")\n");
+        }
 
         ContentResolver cr = context.getContentResolver();
         sb.append("\nSettings.Global:\n");

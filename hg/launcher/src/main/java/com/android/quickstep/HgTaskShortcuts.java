@@ -164,34 +164,34 @@ public final class HgTaskShortcuts {
         }
     };
 
+    /**
+     * The card's Lock / Unlock, as the swipe-down and the hold buttons: the whole card (both apps
+     * of a split pair, HgTaskLocking), whichever of its app menus it was picked from.
+     */
     static final class LockShortcut extends SystemShortcut<RecentsViewContainer> {
         private final TaskContainer mTaskContainer;
 
         LockShortcut(RecentsViewContainer target, TaskContainer taskContainer) {
-            super(isLocked(target, taskContainer) ? R.drawable.hg_ic_task_unlock : R.drawable.ic_lock,
-                    isLocked(target, taskContainer)
-                            ? R.string.hg_task_menu_unlock : R.string.hg_task_menu_lock,
-                    target, taskContainer.getItemInfo(), taskContainer.getTaskView());
-            mTaskContainer = taskContainer;
+            this(target, taskContainer,
+                    HgTaskLocking.isLocked(target.asContext(), taskContainer.getTaskView()));
         }
 
-        private static boolean isLocked(RecentsViewContainer target, TaskContainer container) {
-            return HgTaskLockStore.get(target.asContext()).isLocked(container.getTask());
+        private LockShortcut(RecentsViewContainer target, TaskContainer taskContainer,
+                boolean locked) {
+            super(locked ? R.drawable.hg_ic_task_unlock : R.drawable.ic_lock,
+                    locked ? R.string.hg_task_menu_unlock : R.string.hg_task_menu_lock,
+                    target, taskContainer.getItemInfo(), taskContainer.getTaskView());
+            mTaskContainer = taskContainer;
         }
 
         @Override
         public void onClick(View view) {
             dismissTaskMenuView();
-            Task task = mTaskContainer.getTask();
-            String pkg = HgTaskLockStore.packageOf(task);
-            if (pkg == null) return;
-            HgTaskLockStore store = HgTaskLockStore.get(mTarget.asContext());
-            boolean locked = !store.isLocked(pkg, task.key.userId);
-            store.setLocked(pkg, task.key.userId, locked);
-            RecentsView<?, ?> rv = mTarget.getOverviewPanel();
-            if (rv != null) {
-                HgTaskLockBadge.refresh(rv, HgTaskLocks.key(pkg, task.key.userId), locked);
-            }
+            TaskView taskView = mTaskContainer.getTaskView();
+            if (!HgTaskLocking.canLock(taskView)) return;
+            boolean locked = HgTaskLocking.toggle(mTarget.asContext(), taskView);
+            HgRecentsHaptics.playLock(taskView, locked);
+            Log.i(TAG, (locked ? "locked" : "unlocked") + " from the card menu");
         }
     }
 

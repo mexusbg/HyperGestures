@@ -481,9 +481,10 @@ public final class RecentsActivity extends StatefulActivity<RecentsState> implem
     @Override
     protected void onStop() {
         super.onStop();
+        // HyperGestures: no wallpaper zoom reset here: recents' depth never zooms (only 0 is sent,
+        // once per window, HgRecentsDepthController.hgWallpaperZoom).
         if (mHgDepthController != null) {
             mHgDepthController.setActivityStarted(false);
-            HgRecentsBlur.onStop(this);
         }
         // HyperGestures: the split flags stay until the move they decide (hgKeepsTask): the rest
         // state change a launch started can end after this stop.

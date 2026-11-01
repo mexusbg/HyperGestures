@@ -65,22 +65,6 @@ public final class HgRecentsBlur {
     }
 
     /**
-     * onStop: the wallpaper zoom the depth applied must not outlive recents (WindowManager takes
-     * the largest zoom of all windows, visible or not, so the home screen would stay zoomed).
-     */
-    public static void onStop(RecentsActivity activity) {
-        try {
-            android.view.View root = activity.getRootView();
-            android.os.IBinder token = root == null ? null : root.getWindowToken();
-            android.app.WallpaperManager wm =
-                    activity.getSystemService(android.app.WallpaperManager.class);
-            if (token != null && wm != null) wm.setWallpaperZoomOut(token, 0f);
-        } catch (RuntimeException e) {
-            Log.w(TAG, "resetting the wallpaper zoom failed", e);
-        }
-    }
-
-    /**
      * Whether the blur-styled theme (the dim over the wallpaper) applies: whenever there is a
      * controller, with or without blur right now (scrimColor darkens the dim without blur). With
      * hypergestures_blur_fallback=0, 0.3.9.29's rule: only with blur at creation.

@@ -6,6 +6,7 @@ therefore allowlist EVERY platform permission the APK requests (entries for non-
 permissions are ignored by the framework), exactly as QuickSwitch does.
 """
 import re
+import xml.etree.ElementTree as ET
 from xml.sax.saxutils import quoteattr
 
 # aapt2 prints <uses-permission-sdk-23> entries as "uses-permission-sdk-23: name='...'".
@@ -26,6 +27,19 @@ def render_xml(package: str, permissions: list[str]) -> str:
     return "\n".join(lines)
 
 
-def missing(xml_text: str, permissions: list[str]) -> list[str]:
-    present = set(re.findall(r'<permission name="([^"]+)"', xml_text))
+def allowlisted(xml_text: str, package: str) -> set[str]:
+    """The permissions an allowlist file grants `package`, read the way the framework's
+    SystemConfig reads it: <permission name=…> children of a <privapp-permissions package=…>
+    element under the <permissions> (or <config>) root. Raises ET.ParseError on malformed XML."""
+    root = ET.fromstring(xml_text)
+    if root.tag not in ("permissions", "config"):
+        return set()
+    return {perm.get("name") for block in root.findall("privapp-permissions")
+            if block.get("package") == package
+            for perm in block.findall("permission") if perm.get("name")}
+
+
+def missing(xml_text: str, package: str, permissions: list[str]) -> list[str]:
+    """The `permissions` an allowlist file (as packaged) does not grant `package`."""
+    present = allowlisted(xml_text, package)
     return [p for p in permissions if p not in present]

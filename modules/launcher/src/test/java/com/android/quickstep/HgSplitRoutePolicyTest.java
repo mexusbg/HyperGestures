@@ -26,32 +26,22 @@ public class HgSplitRoutePolicyTest {
         assertTrue(HgSplitRoutePolicy.useSoSc(true, HgSplitRoutePolicy.SOSC_ENABLE_DEFAULT));
     }
 
-    private static final String FP = "Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.11.XPAEUXM:user/release-keys";
     private static final String DESC = "com.android.wm.shell.sosc.ISoScSplitScreen";
 
-    /** The build the codes were taken from, and the binder is ISoScSplitScreen. */
-    @Test public void matchingFirmwareAndDescriptor_soscUsable() {
-        assertTrue(HgSplitRoutePolicy.soscBinderUsable(FP, FP, DESC, DESC));
+    /** The phone's Shell confirmed every SoSc call, and the binder is ISoScSplitScreen. */
+    @Test public void confirmedCallsAndDescriptor_soscUsable() {
+        assertTrue(HgSplitRoutePolicy.soscBinderUsable(true, DESC, DESC));
     }
 
-    /** An OTA: the pinned transaction codes may now name other Shell methods. */
-    @Test public void otherFirmware_soscNotUsable() {
-        assertFalse(HgSplitRoutePolicy.soscBinderUsable(
-                "Xiaomi/nezha_eea/nezha:17/CP2A.260705.020/OS4.0.1.0.XPAEUXM:user/release-keys",
-                FP, DESC, DESC));
-        assertFalse(HgSplitRoutePolicy.soscBinderUsable(null, FP, DESC, DESC));
-    }
-
-    @Test public void noExpectedFingerprint_soscNotUsable() {
-        assertFalse(HgSplitRoutePolicy.soscBinderUsable(FP, "", DESC, DESC));
-        assertFalse(HgSplitRoutePolicy.soscBinderUsable(FP, null, DESC, DESC));
-        assertFalse(HgSplitRoutePolicy.soscBinderUsable("", "", DESC, DESC));
+    /** Any firmware works; only calls the phone's Shell did not confirm turn SoSc off. */
+    @Test public void unconfirmedCalls_soscNotUsable() {
+        assertFalse(HgSplitRoutePolicy.soscBinderUsable(false, DESC, DESC));
     }
 
     /** The binder under the bundle key is some other interface, or its descriptor is unreadable. */
     @Test public void otherOrUnknownDescriptor_soscNotUsable() {
-        assertFalse(HgSplitRoutePolicy.soscBinderUsable(FP, FP,
+        assertFalse(HgSplitRoutePolicy.soscBinderUsable(true,
                 "com.android.wm.shell.splitscreen.ISplitScreen", DESC));
-        assertFalse(HgSplitRoutePolicy.soscBinderUsable(FP, FP, null, DESC));
+        assertFalse(HgSplitRoutePolicy.soscBinderUsable(true, null, DESC));
     }
 }

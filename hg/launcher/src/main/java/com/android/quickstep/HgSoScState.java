@@ -15,9 +15,10 @@
 // targets (splitBoundsFor), so the gesture takes AOSP's split path end to end. Returning to the
 // app finishes the animation with toHome=false, which makes Shell restore the split by itself.
 //
-// Codes and parcels are from the device's Miui-WindowManager-Shell (research:
-// docs/research/2026-10-08-sosc-split-gesture.md), so the binders are used only on the build this
-// APK was made for and when they name the expected descriptors (as HgSoScSplitScreen). Off:
+// Codes and parcels are those of the phone's own Miui-WindowManager-Shell (research:
+// docs/research/2026-10-08-sosc-split-gesture.md): each code is read from it at runtime and the
+// binders are used only when every call was confirmed there (HgShellCalls, any firmware) and they
+// name the expected descriptors (as HgSoScSplitScreen). Off:
 // Settings.Global hypergestures_split_gesture=0: no pair and no added bounds, so each half animates
 // as before (HyperOS's divider background is still kept out of the app targets; it only exists in
 // a split).
@@ -27,7 +28,6 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.graphics.Rect;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
@@ -40,7 +40,6 @@ import androidx.annotation.Nullable;
 import com.android.launcher3.util.Executors;
 import com.android.wm.shell.shared.split.SplitBounds;
 import com.android.wm.shell.shared.split.SplitScreenConstants;
-import com.hypergestures.HgBuildConfig;
 
 public final class HgSoScState {
     private static final String TAG = "HgSplit";
@@ -52,12 +51,10 @@ public final class HgSoScState {
             "com.android.wm.shell.multitasking.common.IMultiTaskingStateChangeListener";
     static final String SOSC_DESC = "com.android.wm.shell.sosc.ISoScSplitScreen";
     static final String SOSC_LISTENER_DESC = "com.android.wm.shell.sosc.ISoScSplitScreenListener";
-    private static final int MTSM_REGISTER = 1;
-    private static final int MTSM_UNREGISTER = 2;
-    private static final int SOSC_REGISTER = 2;
-    private static final int SOSC_UNREGISTER = 3;
-    private static final int ON_SOSC_STATE_CHANGED = 1;
-    /** IMultiTaskingStateChangeListener's last code (all oneway; 2-16 are not used here). */
+    /**
+     * IMultiTaskingStateChangeListener's last code on OS4.0.0.11/.13 (all oneway; only the state
+     * code is used here): the rest are swallowed up to this or the state code, if higher.
+     */
     private static final int LISTENER_LAST_CODE = 16;
     /** SoSc state: both halves filled (-1 off, 0/1 one app with the home screen). */
     static final int STATE_FULL = 2;
@@ -75,23 +72,94 @@ public final class HgSoScState {
             this.leftTop = new Rect(leftTop);
             this.rightBottom = new Rect(rightBottom);
         }
+
+        boolean sameTasks(@Nullable Pair other) {
+            return other != null && other.leftTopTaskId == leftTopTaskId
+                    && other.rightBottomTaskId == rightBottomTaskId;
+        }
     }
 
-    @Nullable private static volatile Pair sPair;
-    /** SoSc's last reported state (-1 when not followed). */
-    private static volatile int sLastState = -1;
+    /** Where a pair change goes: TopTaskTracker, on the main thread (-1 ids clear it). */
+    interface PairSink {
+        void post(int leftTopTaskId, int rightBottomTaskId);
+    }
+
+    /**
+     * The followed state and pair, and the listener they come from. One lock for the binder
+     * thread's reports and unregister: a report still in flight when unregister runs either lands
+     * before it (and unregister's clear is posted after its pair) or finds its listener gone; it
+     * can never post its pair after the clear, which would leave TopTaskTracker a stale pair.
+     */
+    static final class Feed {
+        @Nullable private Object mSource;
+        @Nullable private volatile Pair mPair;
+        /** SoSc's last reported state (-1 when not followed). */
+        private volatile int mLastState = -1;
+
+        synchronized void start(Object source) {
+            mSource = source;
+        }
+
+        /** Stops following and forgets the pair; always clears TopTaskTracker's, given a sink. */
+        synchronized void stop(@Nullable PairSink sink) {
+            mSource = null;
+            mPair = null;
+            mLastState = -1;
+            if (sink != null) sink.post(-1, -1);
+        }
+
+        /**
+         * A state report from {@code source}'s listener: records it, and posts the pair's ids when
+         * they changed. @return whether it posted (never once {@code source} is not the followed
+         * listener: unregistered while the report was in flight).
+         */
+        synchronized boolean onState(Object source, int state, @Nullable Pair pair,
+                PairSink sink) {
+            if (source != mSource) return false;
+            mLastState = state;
+            Pair old = mPair;
+            mPair = pair;
+            if (pair == null ? old == null : pair.sameTasks(old)) return false;
+            sink.post(pair == null ? -1 : pair.leftTopTaskId,
+                    pair == null ? -1 : pair.rightBottomTaskId);
+            return true;
+        }
+
+        @Nullable
+        Pair pair() {
+            return mPair;
+        }
+
+        int lastState() {
+            return mLastState;
+        }
+
+        void forgetPair() {
+            mPair = null;
+        }
+    }
+
+    private static final Feed FEED = new Feed();
     @Nullable private static volatile HgSoScState sCurrent;
+    /** For unregister's clear when nothing is followed (register's own unregister). */
+    @Nullable private static volatile Context sAppContext;
 
     private final Context mContext;
     private final IBinder mManager;
     private final IBinder mSoSc;
+    /** This firmware's codes (HgShellInterfaces), confirmed before this instance exists. */
+    private final int mMtsmRegister;
+    private final int mMtsmUnregister;
+    private final int mSoScRegister;
+    private final int mSoScUnregister;
+    private final int mOnStateCode;
     /** Never called by Shell; registering it switches Shell's state forward on. */
     private final Binder mSoScDummy = new Binder(SOSC_LISTENER_DESC);
     private final Binder mListener = new Binder(LISTENER_DESC) {
         @Override
         protected boolean onTransact(int code, Parcel data, @Nullable Parcel reply, int flags)
                 throws RemoteException {
-            if (code == ON_SOSC_STATE_CHANGED) {
+            if (code == mOnStateCode) {
                 data.enforceInterface(LISTENER_DESC);
                 Rect root = data.readTypedObject(Rect.CREATOR);
                 Rect leftTop = data.readTypedObject(Rect.CREATOR);
@@ -105,17 +173,23 @@ public final class HgSoScState {
                 onState(state, leftTopTask, rightBottomTask, leftTop, rightBottom, minimized);
                 return true;
             }
-            if (code > ON_SOSC_STATE_CHANGED && code <= LISTENER_LAST_CODE) {
+            if (code >= 1 && code <= Math.max(LISTENER_LAST_CODE, mOnStateCode)) {
                 return true; // oneway notifications we do not use
             }
             return super.onTransact(code, data, reply, flags);
         }
     };
 
-    private HgSoScState(Context context, IBinder manager, IBinder sosc) {
+    private HgSoScState(Context context, IBinder manager, IBinder sosc,
+            HgShellCalls.Result calls) {
         mContext = context.getApplicationContext();
         mManager = manager;
         mSoSc = sosc;
+        mMtsmRegister = calls.code(HgShellCalls.Call.MTSM_REGISTER_LISTENER);
+        mMtsmUnregister = calls.code(HgShellCalls.Call.MTSM_UNREGISTER_LISTENER);
+        mSoScRegister = calls.code(HgShellCalls.Call.SOSC_REGISTER_LISTENER);
+        mSoScUnregister = calls.code(HgShellCalls.Call.SOSC_UNREGISTER_LISTENER);
+        mOnStateCode = calls.code(HgShellCalls.Call.MTSM_ON_SOSC_STATE_CHANGED);
     }
 
     /**
@@ -123,75 +197,75 @@ public final class HgSoScState {
      * bundle (replacing an earlier registration), or does nothing where it can't.
      */
     public static synchronized void register(Context context, @Nullable Bundle params) {
+        sAppContext = context.getApplicationContext();
         unregister();
         if (params == null || !HgRecentsSettings.isOn(context, HgRecentsSettings.SPLIT_GESTURE)) {
             return;
         }
         IBinder manager = params.getBinder(MTSM_KEY);
         IBinder sosc = params.getBinder(HgSoScSplitScreen.BUNDLE_KEY);
-        if (manager == null || sosc == null
-                || !HgBuildConfig.EXPECTED_FINGERPRINT.equals(Build.FINGERPRINT)
+        HgShellCalls.Result calls = HgShellInterfaces.get();
+        boolean confirmed = calls.usable(HgShellCalls.Feature.SPLIT_STATE);
+        if (manager == null || sosc == null || !confirmed
                 || !MTSM_DESC.equals(descriptorOf(manager))
                 || !SOSC_DESC.equals(descriptorOf(sosc))) {
             Log.i(TAG, "split state not followed (binders " + (manager != null) + "/"
-                    + (sosc != null) + ", build " + Build.FINGERPRINT + ")");
+                    + (sosc != null) + (confirmed ? ""
+                    : ", " + calls.reason(HgShellCalls.Feature.SPLIT_STATE)) + ")");
             return;
         }
-        HgSoScState state = new HgSoScState(context, manager, sosc);
+        HgSoScState state = new HgSoScState(context, manager, sosc, calls);
         sCurrent = state; // before registering: Shell replays the current state at once
-        oneway(manager, MTSM_REGISTER, MTSM_DESC, state.mListener);
-        oneway(sosc, SOSC_REGISTER, SOSC_DESC, state.mSoScDummy);
+        FEED.start(state);
+        oneway(manager, state.mMtsmRegister, MTSM_DESC, state.mListener);
+        oneway(sosc, state.mSoScRegister, SOSC_DESC, state.mSoScDummy);
         Log.i(TAG, "following HyperOS's split state");
     }
 
-    /** SystemUiProxy.clearProxy: stops following, and forgets the pair. */
+    /**
+     * SystemUiProxy.clearProxy (through register): stops following, forgets the pair, and always
+     * clears TopTaskTracker's, after any pair the listener posted (FEED's lock).
+     */
     public static synchronized void unregister() {
         HgSoScState state = sCurrent;
         sCurrent = null;
-        sPair = null;
-        sLastState = -1;
+        Context context = state != null ? state.mContext : sAppContext;
+        FEED.stop(context == null ? null : mainSink(context));
         if (state == null) return;
-        oneway(state.mManager, MTSM_UNREGISTER, MTSM_DESC, state.mListener);
-        oneway(state.mSoSc, SOSC_UNREGISTER, SOSC_DESC, state.mSoScDummy);
-        Executors.MAIN_EXECUTOR.execute(() -> TopTaskTracker.INSTANCE.get(state.mContext)
-                .hgSetSoScPair(-1, -1));
+        oneway(state.mManager, state.mMtsmUnregister, MTSM_DESC, state.mListener);
+        oneway(state.mSoSc, state.mSoScUnregister, SOSC_DESC, state.mSoScDummy);
+    }
+
+    private static PairSink mainSink(Context context) {
+        return (lt, rb) -> Executors.MAIN_EXECUTOR.execute(() ->
+                TopTaskTracker.INSTANCE.get(context).hgSetSoScPair(lt, rb));
     }
 
     /** Binder thread. */
     private void onState(int state, @Nullable ActivityManager.RunningTaskInfo leftTopTask,
             @Nullable ActivityManager.RunningTaskInfo rightBottomTask, @Nullable Rect leftTop,
             @Nullable Rect rightBottom, boolean minimized) {
-        if (sCurrent != this) return; // unregistered while this call was in flight
-        sLastState = state;
         Pair pair = (state == STATE_FULL && !minimized && leftTopTask != null
                 && rightBottomTask != null && leftTop != null && rightBottom != null
                 && isPair(leftTopTask.taskId, rightBottomTask.taskId, leftTop, rightBottom))
                 ? new Pair(leftTopTask.taskId, rightBottomTask.taskId, leftTop, rightBottom)
                 : null;
-        Pair old = sPair;
-        sPair = pair;
-        if (pair == null ? old == null
-                : old != null && old.leftTopTaskId == pair.leftTopTaskId
-                        && old.rightBottomTaskId == pair.rightBottomTaskId) {
-            return;
+        // Posts nothing once unregistered while this call was in flight (FEED's lock).
+        if (FEED.onState(this, state, pair, mainSink(mContext))) {
+            Log.i(TAG, pair == null ? "split state " + state + ": no pair"
+                    : "split pair " + pair.leftTopTaskId + " / " + pair.rightBottomTaskId);
         }
-        Log.i(TAG, pair == null ? "split state " + state + ": no pair"
-                : "split pair " + pair.leftTopTaskId + " / " + pair.rightBottomTaskId);
-        int lt = pair == null ? -1 : pair.leftTopTaskId;
-        int rb = pair == null ? -1 : pair.rightBottomTaskId;
-        Executors.MAIN_EXECUTOR.execute(() ->
-                TopTaskTracker.INSTANCE.get(mContext).hgSetSoScPair(lt, rb));
     }
 
     /** Whether HyperOS's split screen is on (one app with home, or both halves), if followed. */
     public static boolean inSplit() {
-        int state = sLastState;
+        int state = FEED.lastState();
         return state == 0 || state == 1 || state == STATE_FULL;
     }
 
     /** Whether HyperOS's split screen holds one app with the home screen, if followed. */
     public static boolean inOneAppSplit() {
-        return isOneAppState(sLastState);
+        return isOneAppState(FEED.lastState());
     }
 
     /** SoSc's states 0 and 1: one app in the top/left or the bottom/right half, the other empty. */
@@ -204,7 +278,7 @@ public final class HgSoScState {
      * next state broadcast, even an identical one, sets it again.
      */
     static void forgetPair() {
-        sPair = null;
+        FEED.forgetPair();
     }
 
     /** Two distinct real tasks, the first above or left of the second. */
@@ -221,7 +295,7 @@ public final class HgSoScState {
      */
     @Nullable
     public static SplitBounds splitBoundsFor(RemoteAnimationTarget[] targets) {
-        Pair pair = sPair;
+        Pair pair = FEED.pair();
         if (pair == null) return null;
         Rect leftTop = null;
         Rect rightBottom = null;

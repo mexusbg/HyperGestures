@@ -4,6 +4,9 @@ AOSP 17 release builds are all read-only (build map §0.8), so each Flags.x() re
 Value precedence (lowest → highest): AOSP release-config chain, device aflags dump, project overrides.
 A project override that contradicts the device value is reported (stderr WARNING and a Conflicts
 section in the report), since device.txt can never override it.
+
+Every input is read as UTF-8 whatever the platform's locale (Windows may default to cp1251, and
+AOSP's descriptions carry characters such as ‘ ’ and —).
 """
 import argparse
 import re
@@ -12,6 +15,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _TOKEN = re.compile(r'\s+|#[^\n]*|"((?:[^"\\]|\\.)*)"|([{}:])|([A-Za-z0-9_.\-]+)')
+
+# Text-format string escapes. An octal or hex escape is one byte of the UTF-8 encoding, so a
+# literal is unescaped as bytes and decoded once; non-ASCII text passes through unchanged.
+_ESCAPE = re.compile(
+    rb'\\(?:([0-7]{1,3})|x([0-9A-Fa-f]{1,2})|u([0-9A-Fa-f]{4})|U([0-9A-Fa-f]{8})|(.))',
+    re.DOTALL)
+_SIMPLE_ESCAPES = {b"n": b"\n", b"t": b"\t", b"r": b"\r", b"a": b"\a", b"b": b"\b", b"f": b"\f",
+                   b"v": b"\v", b"\\": b"\\", b"'": b"'", b'"': b'"', b"?": b"?"}
+
+_BOOLEANS = {"true": True, "false": False}
 
 
 @dataclass(frozen=True)
@@ -22,6 +35,24 @@ class FlagDecl:
     is_fixed_read_only: bool
 
 
+def _unescape(literal: str) -> str:
+    """A quoted string's content with its escapes resolved (\\n, \\", \\101, \\x41, \\u2018...)."""
+    def one(m: re.Match) -> bytes:
+        octal, hex2, u4, u8, char = m.groups()
+        if octal:
+            if int(octal, 8) > 0xFF:
+                raise ValueError(f"octal escape \\{octal} is not a byte in {literal!r}")
+            return bytes([int(octal, 8)])
+        if hex2:
+            return bytes([int(hex2, 16)])
+        if u4 or u8:
+            return chr(int((u4 or u8).decode("ascii"), 16)).encode("utf-8")
+        if char in _SIMPLE_ESCAPES:
+            return _SIMPLE_ESCAPES[char]
+        raise ValueError(f"unknown escape \\{char.decode('utf-8', 'replace')} in {literal!r}")
+    return _ESCAPE.sub(one, literal.encode("utf-8")).decode("utf-8")
+
+
 def _tokens(text: str):
     pos = 0
     while pos < len(text):
@@ -30,7 +61,7 @@ def _tokens(text: str):
             raise ValueError(f"unexpected character at {pos}: {text[pos:pos + 20]!r}")
         pos = m.end()
         if m.group(1) is not None:
-            yield ("str", bytes(m.group(1), "utf-8").decode("unicode_escape"))
+            yield ("str", _unescape(m.group(1)))
         elif m.group(2):
             yield (m.group(2), m.group(2))
         elif m.group(3):
@@ -146,15 +177,21 @@ def parse_values(text: str):
     return out
 
 
-def parse_kv(text: str):
+def parse_kv(text: str, source: str = "<text>"):
+    """`package.flag=true|false` lines (device.txt, project-overrides.txt); `#` starts a comment.
+    Anything else is an error naming `source`:line, rather than a typo silently reading false."""
     out = {}
-    for raw in text.splitlines():
+    for n, raw in enumerate(text.splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
-        key, value = (s.strip() for s in line.split("=", 1))
+        key, sep, value = (s.strip() for s in line.partition("="))
+        if not sep or "." not in key.strip(".") or key.startswith(".") or key.endswith("."):
+            raise ValueError(f"{source}:{n}: expected package.flag=true|false, got {line!r}")
+        if value.lower() not in _BOOLEANS:
+            raise ValueError(f"{source}:{n}: {key}: expected true or false, got {value!r}")
         pkg, name = key.rsplit(".", 1)
-        out[(pkg, name)] = value.lower() == "true"
+        out[(pkg, name)] = _BOOLEANS[value.lower()]
     return out
 
 
@@ -251,15 +288,20 @@ def main(argv):
             packages[pkg].append(d)
 
     layers = []
-    for cfg in [c.strip() for c in a.chain.read_text().splitlines() if c.strip() and not c.startswith("#")]:
+    chain_lines = a.chain.read_text(encoding="utf-8").splitlines()
+    for cfg in [c.strip() for c in chain_lines if c.strip() and not c.startswith("#")]:
         layer = {}
         for pkg in packages:
             for vf in sorted((a.values_root / cfg / pkg).glob("*.textproto")):
                 for p, n, v in parse_values(vf.read_text(encoding="utf-8")):
                     layer[(p, n)] = v
         layers.append((f"aosp:{cfg}", layer))
-    device = parse_kv(a.device.read_text()) if a.device.exists() else {}
-    project = parse_kv(a.overrides.read_text())
+    try:
+        device = (parse_kv(a.device.read_text(encoding="utf-8"), a.device.as_posix())
+                  if a.device.exists() else {})
+        project = parse_kv(a.overrides.read_text(encoding="utf-8"), a.overrides.as_posix())
+    except ValueError as e:
+        raise SystemExit(f"error: {e}") from e
     layers.append(("device", device))
     layers.append(("project", project))
     resolved = resolve(decls, layers)

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <cache-path name="shared_images" path="/" />
-    <files-path name="log_files" path="/" />
-    <root-path name="apps" path="/" />
+    <!-- HyperGestures: only ImageActionUtils.getImageUri builds URIs here, for screenshots it
+         writes to cacheDir/Overview/; the whole cache dir, files dir and root-path "/" exposed
+         far more of a privileged app than a recents share needs. -->
+    <cache-path name="shared_images" path="Overview/" />
 </paths>

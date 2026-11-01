@@ -40,8 +40,22 @@ import android.graphics.drawable.Icon;
  */
 final class SmallIconFixer {
 
-    /** Largest icon we generate; small icons are displayed far below this. */
+    /**
+     * Longest edge the source artwork is measured at: larger artwork is rendered or scaled down to
+     * this first. The glyph made from it is at most this plus its margin; small icons are
+     * displayed far below that.
+     */
     private static final int MAX_EDGE = 192;
+
+    /**
+     * HyperGestures: the AOD's results by source artwork ({@link Bitmaps#identity}), so a
+     * composition does not measure the same glyph again. Weak keys: an entry goes with its
+     * artwork; {@link #AOD_MAX} bounds it besides. Values are the corrected glyph, or
+     * {@link #UNCHANGED}.
+     */
+    private static final java.util.Map<Object, Object> AOD_RESULTS = new java.util.WeakHashMap<>();
+    private static final int AOD_MAX = 64;
+    private static final Object UNCHANGED = new Object();
 
     /**
      * Opaque fraction above which an icon would tint to a solid blob. A real glyph covers well
@@ -87,49 +101,75 @@ final class SmallIconFixer {
 
     /**
      * @param appCtx a context for the posting app, so the icon's resource resolves
-     * @return a replacement icon, or null when the original is already fine or cannot be improved,
-     *     in which case the caller must leave the notification alone
+     * @return the replacement glyph (for {@link Icon#createWithBitmap}), or null when the original
+     *     is already fine or cannot be improved, in which case the caller must leave the
+     *     notification alone. HyperGestures: null is final for this artwork and may be cached
+     * @throws Exception when the icon could not be loaded or drawn (the app's package not ready,
+     *     or mid-update): nothing was decided, so the caller must not cache it
      */
-    static Icon fix(Context appCtx, Icon small, String key) {
+    static Bitmap fix(Context appCtx, Icon small, String key) throws Exception {
         if (appCtx == null || small == null) {
-            return null;
+            throw new IllegalStateException("no context or icon");
         }
-        Drawable d;
-        try {
-            d = small.loadDrawable(appCtx);
-        } catch (Throwable t) {
-            Logger.v(key + ": small icon did not load (" + t + "), leaving it alone");
-            return null;
+        Drawable d = small.loadDrawable(appCtx);
+        if (d == null) {
+            throw new IllegalStateException("small icon did not load");
         }
-        Bitmap glyph = fixArtwork(d, key);
-        return glyph == null ? null : Icon.createWithBitmap(glyph);
+        return fixArtwork(d, key);
     }
 
     /**
      * Same fix applied to a drawable rather than an {@link Icon}, for the always-on display.
      *
-     * <p>The AOD lives in {@code com.miui.aod}, a separate process with its own
-     * {@code NotificationListenerService}, so it reads the app's original small icon and never sees
-     * the replacement made inside SystemUI. Its {@code NotificationUtils.createIconWithBackground}
-     * composes an oval plate with the glyph tinted SRC_ATOP — which turns an opaque image into a
-     * solid block. Fixing the glyph on the way in lets MIUI keep drawing its own plate and tint.
+     * <p>The AOD is drawn inside SystemUI by {@code com.miui.aod}'s own code (loaded through a
+     * separate ClassLoader), which builds its icons from the notification on its own path rather
+     * than through SystemUI's {@code IconManager}, so the replacement made there does not reach
+     * it. Its {@code NotificationUtils.createIconWithBackground} composes an oval plate with the
+     * glyph tinted SRC_ATOP — which turns an opaque image into a solid block. Fixing the glyph on
+     * the way in lets MIUI keep drawing its own plate and tint.
+     *
+     * <p>HyperGestures: results are cached by source artwork, and each call gets its own drawable
+     * (MIUI tints it), sharing the cached glyph.
      *
      * @return a replacement drawable, or null to leave the original alone
      */
     static Drawable fixDrawable(Drawable original, String key) {
-        Bitmap glyph = fixArtwork(original, key);
-        return glyph == null ? null : new BitmapDrawable(Resources.getSystem(), glyph);
+        Object id = Bitmaps.identity(original);
+        Object result;
+        synchronized (AOD_RESULTS) {
+            result = id == null ? null : AOD_RESULTS.get(id);
+        }
+        if (result == null) {
+            try {
+                Bitmap glyph = fixArtwork(original, key);
+                result = glyph != null ? glyph : UNCHANGED;
+            } catch (Exception e) {
+                Logger.v(key + ": small icon did not render (" + e + "), leaving it alone");
+                return null; // not cached: may work next time
+            }
+            if (id != null) {
+                synchronized (AOD_RESULTS) {
+                    if (AOD_RESULTS.size() >= AOD_MAX) {
+                        AOD_RESULTS.clear();
+                    }
+                    AOD_RESULTS.put(id, result);
+                }
+            }
+        }
+        return result instanceof Bitmap
+                ? new BitmapDrawable(Resources.getSystem(), (Bitmap) result) : null;
     }
 
-    /** @return the corrected glyph, or null when the artwork is already fine or unusable */
-    private static Bitmap fixArtwork(Drawable drawable, String key) {
-        Bitmap art;
-        try {
-            art = Bitmaps.trim(Bitmaps.pixels(drawable, MAX_EDGE));
-        } catch (Throwable t) {
-            Logger.v(key + ": small icon did not render (" + t + "), leaving it alone");
-            return null;
+    /**
+     * @return the corrected glyph, or null when the artwork is already fine or unusable
+     * @throws Exception when the artwork could not be drawn at all
+     */
+    private static Bitmap fixArtwork(Drawable drawable, String key) throws Exception {
+        Bitmap pixels = Bitmaps.pixels(drawable, MAX_EDGE);
+        if (pixels == null) {
+            throw new IllegalStateException("small icon did not render");
         }
+        Bitmap art = Bitmaps.trim(pixels);
         if (art == null || art.getWidth() < 8 || art.getHeight() < 8) {
             return null;
         }
@@ -159,7 +199,8 @@ final class SmallIconFixer {
 
         Bitmaps.dump(key + "-small-src", art);
         Bitmaps.dump(key + "-small-out", glyph);
-        Logger.i(key + ": small icon was a " + Math.round(coverage * 100) + "% solid block on "
+        // HyperGestures: verbose, as the AOD measures per composition (results are cached).
+        Logger.v(key + ": small icon was a " + Math.round(coverage * 100) + "% solid block on "
                 + Logger.hex(plate) + " -> silhouette at " + Math.round(result * 100)
                 + "% coverage");
         return glyph;
@@ -194,7 +235,7 @@ final class SmallIconFixer {
             // there is no usable split does it fall back to the leading element.
             Bitmap stacked = stackTwoLines(ink);
             if (stacked != null) {
-                Logger.i(key + ": small icon artwork is a " + ink.getWidth() + "x" + ink.getHeight()
+                Logger.v(key + ": small icon artwork is a " + ink.getWidth() + "x" + ink.getHeight()
                         + " band (aspect " + Math.round(aspect * 10) / 10f
                         + "); stacked it over two lines as " + stacked.getWidth() + "x"
                         + stacked.getHeight());
@@ -202,7 +243,7 @@ final class SmallIconFixer {
             } else {
                 Bitmap lead = leadingElement(ink);
                 if (lead != null) {
-                    Logger.i(key + ": small icon artwork is a " + ink.getWidth() + "x"
+                    Logger.v(key + ": small icon artwork is a " + ink.getWidth() + "x"
                             + ink.getHeight() + " band (aspect " + Math.round(aspect * 10) / 10f
                             + ") with no usable split; using its leading " + lead.getWidth() + "x"
                             + lead.getHeight() + " element instead");

@@ -8,10 +8,11 @@
 // - Stack: a deck (as HgStackLayout): the front card, older ones smaller behind on the left, the
 //   next one sliding in from the right; each card goes through every place once a cycle.
 // The values are the page's: "0" vertical, "1" horizontal, "2" stack (HgRecentsSettings).
+// Drawn every frame by three views, so frame() fills cards the caller keeps (newCards) instead of
+// allocating new ones.
 package com.android.quickstep;
 
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 
 final class HgLayoutPreview {
@@ -22,16 +23,17 @@ final class HgLayoutPreview {
     /** One cycle of every preview. */
     static final long CYCLE_MS = 6000;
 
+    /** One card of a frame; reused from frame to frame (frame(int, float, Card[])). */
     static final class Card {
-        final float x;
-        final float y;
-        final float w;
-        final float h;
-        final float alpha;
-        /** Draw order (higher on top); the list is already sorted by it. */
-        final float z;
+        float x;
+        float y;
+        float w;
+        float h;
+        float alpha;
+        /** Draw order (higher on top); a frame is already sorted by it. */
+        float z;
 
-        Card(float x, float y, float w, float h, float alpha, float z) {
+        void set(float x, float y, float w, float h, float alpha, float z) {
             this.x = x;
             this.y = y;
             this.w = w;
@@ -70,6 +72,9 @@ final class HgLayoutPreview {
     private static final float[] S_SCALE = {1f, 1f, 1f, 1f, 1f, 0.9f, 0.9f, 0.8f, 0.8f};
     private static final float[] S_ALPHA = {1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0f};
 
+    /** The most cards a frame has (vertical's). */
+    static final int MAX_CARDS = VERTICAL_CARDS;
+
     private HgLayoutPreview() {}
 
     /** The preview for a setting value ("0", "1", "2"); -1 for anything else. */
@@ -85,24 +90,39 @@ final class HgLayoutPreview {
         return Integer.toString(mode);
     }
 
-    /** The cards of {@code mode} at {@code t} (0 to 1) of the cycle, back to front. */
+    /** Cards for frame(int, float, Card[]): MAX_CARDS of them, kept by the caller. */
+    static Card[] newCards() {
+        Card[] cards = new Card[MAX_CARDS];
+        for (int i = 0; i < cards.length; i++) cards[i] = new Card();
+        return cards;
+    }
+
+    /** The cards of {@code mode} at {@code t} (0 to 1) of the cycle, back to front (tests). */
     static List<Card> frame(int mode, float t) {
-        List<Card> cards = new ArrayList<>();
+        Card[] cards = newCards();
+        return Arrays.asList(cards).subList(0, frame(mode, t, cards));
+    }
+
+    /**
+     * Fills {@code cards} (newCards) with the cards of {@code mode} at {@code t} (0 to 1) of the
+     * cycle, back to front, and returns how many there are. Allocates nothing.
+     */
+    static int frame(int mode, float t, Card[] cards) {
         switch (mode) {
             case VERTICAL: {
                 float scroll = keyframes(t, V_TIMES, V_SCROLL);
                 for (int k = 0; k < VERTICAL_CARDS; k++) {
-                    cards.add(new Card(V_LEFT + (k % 2) * V_COLUMN,
-                            V_TOP + (k / 2) * V_ROW - scroll, V_W, V_H, 1f, 0f));
+                    cards[k].set(V_LEFT + (k % 2) * V_COLUMN,
+                            V_TOP + (k / 2) * V_ROW - scroll, V_W, V_H, 1f, 0f);
                 }
-                break;
+                return VERTICAL_CARDS;
             }
             case HORIZONTAL: {
                 float page = keyframes(t, H_TIMES, H_PAGES);
                 for (int k = 0; k < HORIZONTAL_CARDS; k++) {
-                    cards.add(new Card(H_LEFT + (k - page) * H_PAGE, H_TOP, H_W, H_H, 1f, 0f));
+                    cards[k].set(H_LEFT + (k - page) * H_PAGE, H_TOP, H_W, H_H, 1f, 0f);
                 }
-                break;
+                return HORIZONTAL_CARDS;
             }
             default: {
                 for (int k = 0; k < STACK_CARDS; k++) {
@@ -113,12 +133,25 @@ final class HgLayoutPreview {
                     // Scaled about the card's centre, as TaskView's pivot.
                     float x = keyframes(p, S_TIMES, S_LEFT) + (S_W - w) / 2f;
                     float y = S_TOP + (S_H - h) / 2f;
-                    cards.add(new Card(x, y, w, h, keyframes(p, S_TIMES, S_ALPHA), 1f - p));
+                    cards[k].set(x, y, w, h, keyframes(p, S_TIMES, S_ALPHA), 1f - p);
                 }
-                Collections.sort(cards, (a, b) -> Float.compare(a.z, b.z));
+                sortByZ(cards, STACK_CARDS);
+                return STACK_CARDS;
             }
         }
-        return cards;
+    }
+
+    /** Insertion sort of the first {@code n} cards by z, in place (a handful; no allocation). */
+    private static void sortByZ(Card[] cards, int n) {
+        for (int i = 1; i < n; i++) {
+            Card c = cards[i];
+            int j = i - 1;
+            while (j >= 0 && cards[j].z > c.z) {
+                cards[j + 1] = cards[j];
+                j--;
+            }
+            cards[j + 1] = c;
+        }
     }
 
     /** {@code values} at {@code t} over {@code times}, eased in and out between keyframes. */

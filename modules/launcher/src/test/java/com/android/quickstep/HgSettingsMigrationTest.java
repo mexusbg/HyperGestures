@@ -6,6 +6,13 @@ import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 public class HgSettingsMigrationTest {
     /** Unset, empty or invalid: write what HyperOS shows (MIUI's unset default is vertical). */
     @Test public void layoutCopiedFromMiuiWhenUnset() {
@@ -66,5 +73,18 @@ public class HgSettingsMigrationTest {
         assertEquals(0, HgSettingsMigration.stepsDone("x"));
         assertEquals(1, HgSettingsMigration.stepsDone("1"));
         assertEquals(2, HgSettingsMigration.stepsDone("2 "));
+    }
+
+    /** The marker may move on only once every due key is gone; a refused delete is reported. */
+    @Test public void deleteAllReportsKeysStillSet() {
+        Set<String> set = new HashSet<>(Arrays.asList("a", "b", "c"));
+        List<String> deleted = new ArrayList<>();
+        // "b" is refused; "d" is not set, so it is not deleted at all.
+        List<String> left = HgSettingsMigration.deleteAll(new String[] {"a", "b", "c", "d"},
+                set::contains, key -> !"b".equals(key) && deleted.add(key));
+        assertEquals(Arrays.asList("b"), left);
+        assertEquals(Arrays.asList("a", "c"), deleted);
+        assertEquals(Collections.emptyList(), HgSettingsMigration.deleteAll(
+                new String[] {"a", "d"}, set::contains, key -> true));
     }
 }

@@ -10,12 +10,15 @@ package com.hypergestures.notif;
 
 import android.app.Notification;
 import android.content.Context;
-import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.Icon;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.StatusBarNotification;
+import android.util.LruCache;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -23,13 +26,12 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 
 /**
- * Restores colored notification icons on HyperOS 3.3 / Android 17.
+ * Restores colored notification icons on HyperOS 4 / Android 17.
  *
  * <p>The icon is substituted in {@code IconManager.createIcons} / {@code updateIcons}, before
  * the original body runs. Two things are essential on Android 17:
@@ -38,7 +40,7 @@ import io.github.libxposed.api.XposedModule;
  *   <li>{@code IconManager.getIconDescriptor} returns a cached {@code IconPack
  *       .mSmallIconDescriptor} before it ever looks at the notification. Android 16 introduced
  *       a flow-based icon pipeline that can populate that cache first, so mutating the
- *       notification alone is not enough — the cached descriptors must be cleared too.
+ *       notification alone is not enough — the cached descriptor must be cleared too.
  *   <li>HyperOS routes the icon through {@code NotifImageUtil.getSmallIcon}, which substitutes
  *       the launcher icon unless {@code miui.isGrayscaleIcon} is set. We set it so our icon is
  *       the one that survives.
@@ -61,8 +63,13 @@ public class HgNotifModule extends XposedModule {
 
     private static final String SYSTEMUI = "com.android.systemui";
 
-    /** The always-on display is a separate app in its own process, with its own icon pipeline. */
+    /**
+     * The always-on display's app. Its views are drawn inside SystemUI, through a ClassLoader of
+     * their own (see {@link #watchForAodClasses}); it also runs as a process of its own.
+     */
     private static final String AOD = "com.miui.aod";
+
+    private static final String AOD_UTILS = "com.miui.aod.notification.NotificationUtils";
 
     /**
      * Reshape notification app icons that HyperOS left as unmasked squares. This is the fix for
@@ -86,9 +93,9 @@ public class HgNotifModule extends XposedModule {
     /**
      * Reshape the always-on display's notification icons the same way as the shade's.
      *
-     * <p>The AOD is {@code com.miui.aod}, a separate app in a separate process that reads
-     * notifications through its own listener service — so nothing the SystemUI hooks do reaches
-     * it. See {@link #installAodHook}.
+     * <p>The AOD is {@code com.miui.aod}'s own code, drawn inside SystemUI through a separate
+     * ClassLoader, and it builds its icons on its own path rather than through
+     * {@code IconManager} — so the shade hooks do not reach it. See {@link #installAodHook}.
      */
     private static final boolean FIX_AOD_ICON = true;
 
@@ -106,37 +113,82 @@ public class HgNotifModule extends XposedModule {
      */
     private static final boolean DUMP_BITMAPS = false;
 
+    /**
+     * HyperGestures: what the generated small icons may hold, in bytes. Only icons that were
+     * solid blocks get one (at most ~190 KB, usually far less), so this is plenty.
+     */
+    private static final int SMALL_ICON_BUDGET = 1024 * 1024;
+
+    /** HyperGestures: the cost of an entry that holds no bitmap of its own. */
+    private static final int ENTRY_SIZE = 64;
+
+    /** HyperGestures: cached for a small icon that is fine as it is (or cannot be improved). */
+    private static final Object NO_FIX = new Object();
+
     private Field fSbn;
     private Field fIcons;
     private Field fSmallIconDescriptor;
-    private Field fPeopleAvatarDescriptor;
     private Class<?> entryClass;
-    private Method mGetSystemUiContext;
 
     private volatile Context sysCtx;
-    private volatile PackageManager pm;
+
+    /** HyperGestures: this process's name, from {@link #onModuleLoaded}; null if not given. */
+    private volatile String processName;
+
+    /** HyperGestures: true in SystemUI, where the hooked mark may be written. */
+    private volatile boolean inSystemUi;
 
     /**
-     * Loaders already hooked. There can be more than one: the loader from
+     * Loaders already tried. There can be more than one: the loader from
      * {@code createPackageContextAsUser} hosts the AOD classes but is <em>not</em> the one MIUI
      * inflates its views with, and hooks only apply to the Class objects of the loader they were
-     * installed on. So every distinct loader is hooked rather than stopping at the first success.
+     * installed on. So every distinct loader is tried rather than stopping at the first success.
      */
     private final java.util.Set<ClassLoader> hookedAodLoaders =
             java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
 
+    /**
+     * HyperGestures: the {@code NotificationUtils} classes hooked. Two loaders can resolve to the
+     * same class (one delegating to the other), which must not be hooked twice.
+     */
+    private final java.util.Set<Class<?>> hookedAodClasses =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
+    /** HyperGestures: the {@code ViewGroup.addView} hook, unhooked once it has done its job. */
+    private volatile XposedInterface.HookHandle addViewHook;
+
     /** For handing the live AOD ClassLoader back from the view-tree scan. */
     private static volatile HgNotifModule instance;
 
-    /** Generated icons are stable per app; key is user:package. */
-    private final ConcurrentHashMap<String, Icon> cache = new ConcurrentHashMap<>();
+    /**
+     * Generated small icons ({@link Fixed}) or {@link #NO_FIX}, by user, package and icon
+     * ({@link #smallIconKey}). HyperGestures: keyed by the icon rather than the package, so an
+     * app's other icons are measured for themselves; a failure to load or draw one is not cached
+     * at all; bounded, and dropped per package by {@link PackageWatcher}.
+     */
+    private final LruCache<String, Object> smallIcons =
+            new LruCache<String, Object>(SMALL_ICON_BUDGET) {
+                @Override
+                protected int sizeOf(String key, Object value) {
+                    return value instanceof Fixed ? ((Fixed) value).bytes : ENTRY_SIZE;
+                }
+            };
 
-    /** Packages we decided not to touch, so we do not redo the work on every update. */
-    private final ConcurrentHashMap<String, Boolean> skip = new ConcurrentHashMap<>();
+    /** A generated small icon and what it costs the cache. */
+    private static final class Fixed {
+        final Icon icon;
+        final int bytes;
+
+        Fixed(Icon icon, int bytes) {
+            this.icon = icon;
+            this.bytes = bytes;
+        }
+    }
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
         Xp.module = this;
+        processName = param.getProcessName();
         Logger.i("module loaded in " + param.getProcessName() + ", framework "
                 + getFrameworkName() + " " + getFrameworkVersion()
                 + " (api " + getApiVersion() + ")");
@@ -148,14 +200,23 @@ public class HgNotifModule extends XposedModule {
             return;
         }
         String pkg = param.getPackageName();
+        // HyperGestures: only the app's main process (named after the package). A secondary
+        // process of SystemUI must not get the global addView hook, the AOD sweep or the mark.
+        String proc = processName;
+        if (proc != null && !proc.equals(pkg)) {
+            Logger.i("not hooking " + pkg + " in its secondary process " + proc);
+            return;
+        }
         try {
             if (SYSTEMUI.equals(pkg)) {
                 instance = this;
-                install(param.getDefaultClassLoader());
-                // HyperGestures: tell our settings page the hooks run this boot (fails soft).
-                NotifSetting.markHooked(NotifKeys.SCOPE_SYSTEMUI);
+                inSystemUi = true;
+                if (install(param.getDefaultClassLoader())) {
+                    // HyperGestures: tell our settings page the hooks run this boot (fails soft).
+                    NotifSetting.markHooked(NotifKeys.SCOPE_SYSTEMUI);
+                }
             } else if (AOD.equals(pkg) && FIX_AOD_ICON) {
-                installAodHook(param.getDefaultClassLoader());
+                tryInstallAodHook(param.getDefaultClassLoader(), "the " + AOD + " process", false);
             }
         } catch (Throwable t) {
             Logger.e("install failed in " + pkg, t);
@@ -201,7 +262,7 @@ public class HgNotifModule extends XposedModule {
                         if (!args.isEmpty() && AOD.equals(args.get(0))
                                 && result instanceof Context) {
                             tryInstallAodHook(((Context) result).getClassLoader(),
-                                    chain.getExecutable().getName());
+                                    chain.getExecutable().getName(), false);
                         }
                     } catch (Throwable t) {
                         Logger.v("createPackageContext probe failed: " + t);
@@ -214,18 +275,22 @@ public class HgNotifModule extends XposedModule {
         }
     }
 
-    /** Fallback: the AOD's clock and icon views get added to SystemUI's own hierarchy. */
+    /**
+     * Fallback: the AOD's clock and icon views get added to SystemUI's own hierarchy.
+     * HyperGestures: this taxes every view added in SystemUI, so it is unhooked once the live
+     * loader is hooked ({@link #stopViewDiscovery}).
+     */
     private void hookAddView() {
         try {
             Method addView = ViewGroup.class.getDeclaredMethod(
                     "addView", View.class, int.class, ViewGroup.LayoutParams.class);
-            Xp.hook(addView, chain -> {
+            addViewHook = Xp.hook(addView, chain -> {
                 try {
                     Object child = chain.getArg(0);
                     if (child instanceof View) {
                         Class<?> c = child.getClass();
                         if (c.getName().startsWith("com.miui.aod.")) {
-                            tryInstallAodHook(c.getClassLoader(), c.getName());
+                            tryInstallAodHook(c.getClassLoader(), c.getName(), true);
                         }
                     }
                 } catch (Throwable t) {
@@ -238,15 +303,43 @@ public class HgNotifModule extends XposedModule {
         }
     }
 
-    /** Lets the view-tree scan hand over the loader that owns the live AOD views. */
-    static void offerAodLoader(ClassLoader loader, String via) {
-        HgNotifModule self = instance;
-        if (self != null) {
-            self.tryInstallAodHook(loader, via);
+    /**
+     * HyperGestures: the loader behind the live AOD views is hooked, so the view-based discovery
+     * (the window sweep and the addView hook) ends. The createPackageContext hook stays, cheap and
+     * rare, for an AOD update that brings a new loader.
+     */
+    private void stopViewDiscovery() {
+        AodLoaderFinder.stop();
+        XposedInterface.HookHandle h = addViewHook;
+        if (h == null) {
+            return;
+        }
+        addViewHook = null;
+        try {
+            // Posted: this may run inside the addView hook itself.
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    h.unhook();
+                    Logger.i("AOD loader hooked; no longer watching ViewGroup.addView");
+                } catch (Throwable t) {
+                    Logger.v("addView unhook failed: " + t);
+                }
+            });
+        } catch (Throwable t) {
+            Logger.v("addView unhook not scheduled: " + t);
         }
     }
 
-    private void tryInstallAodHook(ClassLoader loader, String via) {
+    /** Lets the view-tree scan hand over the loader that owns the live AOD views. */
+    static void offerAodLoader(ClassLoader loader, String via, boolean liveView) {
+        HgNotifModule self = instance;
+        if (self != null) {
+            self.tryInstallAodHook(loader, via, liveView);
+        }
+    }
+
+    /** @param liveView true when the loader comes from a view on screen (addView or the sweep) */
+    private void tryInstallAodHook(ClassLoader loader, String via, boolean liveView) {
         if (loader == null) {
             return;
         }
@@ -254,16 +347,36 @@ public class HgNotifModule extends XposedModule {
             if (!hookedAodLoaders.add(loader)) {
                 return;
             }
+            Class<?> utils;
             try {
-                installAodHook(loader);
-                // HyperGestures: the page lists the AOD among the hooked scopes (fails soft).
-                NotifSetting.markHooked(NotifKeys.SCOPE_AOD);
-                Logger.i("AOD hooks installed, loader found via " + via
-                        + " (loader " + Integer.toHexString(System.identityHashCode(loader)) + ")");
+                utils = loader.loadClass(AOD_UTILS);
             } catch (Throwable t) {
-                // A loader that sees some com.miui.aod classes but not the icon methods. Nothing to
-                // undo: it stays in the set so it is not retried.
-                Logger.v("loader via " + via + " cannot host the AOD hooks: " + t);
+                // A loader that sees some com.miui.aod classes but not the icon code. It stays in
+                // the set so it is not retried.
+                Logger.v("loader via " + via + " has no AOD NotificationUtils: " + t);
+                return;
+            }
+            String loaderId = Integer.toHexString(System.identityHashCode(loader));
+            try {
+                String hooked = installAodHook(utils, loader);
+                if (hooked == null) {
+                    Logger.v("loader via " + via + " (loader " + loaderId
+                            + ") shares AOD classes already hooked");
+                } else {
+                    if (inSystemUi) {
+                        // HyperGestures: the page lists the AOD among the hooked scopes (fails
+                        // soft).
+                        NotifSetting.markHooked(NotifKeys.SCOPE_AOD);
+                    }
+                    Logger.i("AOD hooks installed (" + hooked + "), loader found via " + via
+                            + " (loader " + loaderId + ")");
+                }
+                if (liveView) {
+                    stopViewDiscovery();
+                }
+            } catch (Throwable t) {
+                Logger.e("AOD hooks not installed through the loader found via " + via
+                        + " (loader " + loaderId + ")", t);
             }
         }
     }
@@ -287,14 +400,23 @@ public class HgNotifModule extends XposedModule {
      *
      * <p>The {@code mUseSmallIcon} branch composes its own oval and is left alone — it is already
      * round, and its glyph is tinted, so replacing it would only undo AOD's own styling.
+     *
+     * <p>HyperGestures: every lookup comes before the first hook, so a missing method leaves
+     * nothing hooked. The view hooks ({@link AodIcons}) are a second line and do not decide
+     * whether this succeeded.
+     *
+     * @return what was hooked, or null when {@code utils} is hooked already (through another
+     *     loader that resolves to the same class)
      */
-    private void installAodHook(ClassLoader cl) throws Throwable {
-        Logger.i("loading into the AOD, sdk=" + android.os.Build.VERSION.SDK_INT);
-        Class<?> utils = cl.loadClass("com.miui.aod.notification.NotificationUtils");
+    private String installAodHook(Class<?> utils, ClassLoader cl) throws Throwable {
         Class<?> data = cl.loadClass(
                 "com.miui.aod.notification.NotificationController$NotificationData");
         Method getAppIcon = utils.getDeclaredMethod(
                 "getAppIcon", Context.class, data, Notification.class);
+        if (!hookedAodClasses.add(utils)) {
+            return null;
+        }
+        Logger.i("loading into the AOD, sdk=" + android.os.Build.VERSION.SDK_INT);
         Xp.hook(getAppIcon, chain -> {
             Object result = chain.proceed();
             try {
@@ -316,8 +438,9 @@ public class HgNotifModule extends XposedModule {
 
         // The branch that actually runs on this configuration composes MIUI's own oval plate with
         // the glyph tinted SRC_ATOP. Fixing the glyph on the way in keeps MIUI's plate and tint,
-        // and is the only place the AOD's copy of the small icon can be reached: this process has
-        // its own NotificationListenerService, so it never sees SystemUI's replacement.
+        // and is the only place the AOD's small icon can be reached: MIUI's AOD code builds it
+        // from the notification on its own path, never through SystemUI's IconManager, so the
+        // shade's replacement does not reach it.
         int composed = 0;
         for (Method m : utils.getDeclaredMethods()) {
             if (!"createIconWithBackground".equals(m.getName())) {
@@ -346,7 +469,13 @@ public class HgNotifModule extends XposedModule {
 
         // Belt and braces: the composed icon is bound to its view through IAodView, the one point
         // every AOD icon passes through whichever of MIUI's paths built it.
-        AodIcons.install(cl, MASK_AS_CIRCLE);
+        int views = AodIcons.install(cl, MASK_AS_CIRCLE);
+        if (views == 0) {
+            Logger.i("WARNING: no AOD view bind/setter methods hooked through this loader;"
+                    + " getAppIcon and createIconWithBackground still are");
+        }
+        return "getAppIcon, " + composed + " createIconWithBackground, " + views
+                + " view methods";
     }
 
     /** Corrects the glyph drawable in place inside {@code args} before the call proceeds. */
@@ -361,9 +490,11 @@ public class HgNotifModule extends XposedModule {
             Drawable in = (Drawable) args[i];
             Drawable fixed = SmallIconFixer.fixDrawable(in, "aod");
             // HyperGestures: verbose, as it runs per AOD icon.
-            Logger.v("aodGlyph: in=" + in.getClass().getSimpleName()
-                    + " " + in.getIntrinsicWidth() + "x" + in.getIntrinsicHeight()
-                    + (fixed == null ? " -> left as is" : " -> replaced with a legible glyph"));
+            if (Logger.VERBOSE) {
+                Logger.v("aodGlyph: in=" + in.getClass().getSimpleName()
+                        + " " + in.getIntrinsicWidth() + "x" + in.getIntrinsicHeight()
+                        + (fixed == null ? " -> left as is" : " -> replaced with a legible glyph"));
+            }
             if (fixed != null) {
                 args[i] = fixed;
             }
@@ -379,11 +510,13 @@ public class HgNotifModule extends XposedModule {
         if (old instanceof LayerDrawable) {
             // AOD's own oval-plus-glyph composition: already round, and its glyph was corrected on
             // the way in by the createIconWithBackground hook, so leave the composition alone.
-            Logger.v("aodIcon(" + readField(args.get(1), "mPackageName", String.class)
-                    + "): MIUI composed its own oval; glyph handled separately");
+            if (Logger.VERBOSE) {
+                Logger.v("aodIcon(" + Hidden.readField(args.get(1), "mPackageName", String.class)
+                        + "): MIUI composed its own oval; glyph handled separately");
+            }
             return null;
         }
-        String pkg = readField(args.get(1), "mPackageName", String.class);
+        String pkg = Hidden.readField(args.get(1), "mPackageName", String.class);
         if (pkg == null) {
             return null;
         }
@@ -391,16 +524,51 @@ public class HgNotifModule extends XposedModule {
         if (masked == null) {
             return null;
         }
-        Logger.v("aodIcon(" + pkg + "): "
-                + (old == null ? "null" : old.getClass().getSimpleName()) + " -> masked icon");
+        if (Logger.VERBOSE) {
+            Logger.v("aodIcon(" + pkg + "): "
+                    + (old == null ? "null" : old.getClass().getSimpleName()) + " -> masked icon");
+        }
         return masked;
     }
 
-    private void install(ClassLoader cl) throws Throwable {
+    /**
+     * Installs the SystemUI hooks. HyperGestures: each feature on its own, so a lookup one of
+     * them cannot make leaves the others installed.
+     *
+     * @return true when the shade's icon hooks (app icon or small icon) are installed
+     */
+    private boolean install(ClassLoader cl) {
         Logger.i("loading into SystemUI, sdk=" + android.os.Build.VERSION.SDK_INT
                 + " miosVersion=" + sysProp("ro.mi.os.version.code")
                 + " region=" + sysProp("ro.miui.build.region"));
+        boolean hooked = false;
+        if (FIX_APP_ICON) {
+            try {
+                hooked |= installLauncherIconHook(cl) > 0;
+            } catch (Throwable t) {
+                Logger.e("app icon hooks not installed", t);
+            }
+        }
+        if (FIX_AOD_ICON) {
+            try {
+                watchForAodClasses();
+                AodLoaderFinder.start();
+            } catch (Throwable t) {
+                Logger.e("AOD discovery not started", t);
+            }
+        }
+        if (FIX_SMALL_ICON) {
+            try {
+                hooked |= installSmallIconHook(cl) > 0;
+            } catch (Throwable t) {
+                Logger.e("small icon hooks not installed", t);
+            }
+        }
+        return hooked;
+    }
 
+    /** @return how many IconManager methods were hooked */
+    private int installSmallIconHook(ClassLoader cl) throws Throwable {
         entryClass = cl.loadClass(
                 "com.android.systemui.statusbar.notification.collection.NotificationEntry");
         fSbn = entryClass.getDeclaredField("mSbn");
@@ -412,28 +580,6 @@ public class HgNotifModule extends XposedModule {
                 cl.loadClass("com.android.systemui.statusbar.notification.icon.IconPack");
         fSmallIconDescriptor = iconPack.getDeclaredField("mSmallIconDescriptor");
         fSmallIconDescriptor.setAccessible(true);
-        fPeopleAvatarDescriptor = iconPack.getDeclaredField("mPeopleAvatarDescriptor");
-        fPeopleAvatarDescriptor.setAccessible(true);
-
-        try {
-            mGetSystemUiContext = cl.loadClass("android.app.ActivityThread")
-                    .getDeclaredMethod("getSystemUiContext");
-            mGetSystemUiContext.setAccessible(true);
-        } catch (Throwable t) {
-            Logger.v("getSystemUiContext unavailable: " + t);
-        }
-
-        if (FIX_APP_ICON) {
-            installLauncherIconHook(cl);
-        }
-        if (FIX_AOD_ICON) {
-            watchForAodClasses();
-            AodLoaderFinder.start();
-        }
-        if (!FIX_SMALL_ICON) {
-            Logger.i("small-icon substitution disabled; only reshaping app icons");
-            return;
-        }
 
         Class<?> iconManager =
                 cl.loadClass("com.android.systemui.statusbar.notification.icon.IconManager");
@@ -462,6 +608,7 @@ public class HgNotifModule extends XposedModule {
         if (hooked == 0) {
             Logger.i("WARNING: no IconManager.createIcons/updateIcons methods found");
         }
+        return hooked;
     }
 
     /**
@@ -476,8 +623,10 @@ public class HgNotifModule extends XposedModule {
      * plate; an {@link android.graphics.drawable.AdaptiveIconDrawable} instead masks itself to the
      * system icon shape when drawn. The framework explicitly anticipates that type, testing
      * {@code getDrawable() instanceof AdaptiveIconDrawable} in {@code adjustViewForIconStyle()}.
+     *
+     * @return how many provider variants were hooked
      */
-    private void installLauncherIconHook(ClassLoader cl) {
+    private int installLauncherIconHook(ClassLoader cl) {
         String base = "com.android.systemui.statusbar.notification.row.icon."
                 + "NotificationRowIconViewInflaterFactory$createIconProvider$";
         int hooked = 0;
@@ -510,6 +659,7 @@ public class HgNotifModule extends XposedModule {
         if (hooked == 0) {
             Logger.i("WARNING: no icon provider hooked; the white plate fix is inactive");
         }
+        return hooked;
     }
 
     /** Returns the replacement icon, or null to keep {@code old} as the result. */
@@ -517,42 +667,28 @@ public class HgNotifModule extends XposedModule {
         if (self == null) {
             return null;
         }
-        StatusBarNotification sbn = readField(self, "$sbn", StatusBarNotification.class);
+        StatusBarNotification sbn = Hidden.readField(self, "$sbn", StatusBarNotification.class);
         if (sbn == null) {
             return null;
         }
-        Context ctx = readField(self, "$context", Context.class);
+        Context ctx = Hidden.readField(self, "$context", Context.class);
         if (ctx == null) {
             ctx = sysCtx;
         }
         int userId = Hidden.userId(sbn.getUser());
         String pkg = sbn.getPackageName();
 
+        // HyperGestures: another user's app (a work profile's, for instance) keeps its badge.
         Drawable masked = AppIconShaper.maskedFor(ctx, pkg, userId, MASK_AS_CIRCLE);
         if (masked == null) {
             return null;
         }
-        Logger.v("launcherIcon(" + pkg + "): "
-                + (old == null ? "null" : old.getClass().getSimpleName())
-                + " -> masked icon");
-        return masked;
-    }
-
-    /** Reads a (possibly synthetic) field by name, walking up the class hierarchy. */
-    private static <T> T readField(Object target, String name, Class<T> type) {
-        for (Class<?> c = target.getClass(); c != null; c = c.getSuperclass()) {
-            try {
-                Field f = c.getDeclaredField(name);
-                f.setAccessible(true);
-                Object v = f.get(target);
-                return type.isInstance(v) ? type.cast(v) : null;
-            } catch (NoSuchFieldException e) {
-                // Keep walking up.
-            } catch (Throwable t) {
-                return null;
-            }
+        if (Logger.VERBOSE) {
+            Logger.v("launcherIcon(" + pkg + "): "
+                    + (old == null ? "null" : old.getClass().getSimpleName())
+                    + " -> masked icon");
         }
-        return null;
+        return masked;
     }
 
     /** SystemProperties is a hidden API, so it is read reflectively. */
@@ -593,48 +729,130 @@ public class HgNotifModule extends XposedModule {
         if (n == null) {
             return;
         }
+        Icon small = n.getSmallIcon();
+        if (small == null) {
+            return;
+        }
 
         Context ctx = resolveContext(chain.getThisObject());
         if (ctx == null) {
             Logger.v("no SystemUI context yet");
             return;
         }
+        PackageWatcher.ensure(ctx);
         int userId = Hidden.userId(sbn.getUser());
         String pkg = sbn.getPackageName();
-        String key = userId + ":" + pkg;
+        String label = userId + ":" + pkg;
 
-        // Always clear the cached descriptors: on Android 17 getIconDescriptor() returns them
-        // before consulting the notification, so a stale entry would mask our substitution.
-        clearDescriptorCache(entry, key);
-
-        if (skip.containsKey(key)) {
-            return;
-        }
-
-        Icon generated = cache.get(key);
+        Icon generated = fixedSmallIcon(sbn, ctx, small, userId, pkg, label);
         if (generated == null) {
-            Icon small = n.getSmallIcon();
-            if (small == null) {
-                Logger.v(key + ": notification has no small icon");
-                skip.put(key, Boolean.TRUE);
-                return;
-            }
-            Context appCtx = Hidden.packageContext(sbn, ctx);
-            generated = SmallIconFixer.fix(appCtx != null ? appCtx : ctx, small, key);
-            if (generated == null) {
-                skip.put(key, Boolean.TRUE);
-                return;
-            }
-            cache.put(key, generated);
+            return; // left alone: whatever SystemUI cached for it stands
         }
-
-        if (!Hidden.setSmallIcon(n, generated)) {
+        // Already ours when this notification was substituted on an earlier pass.
+        if (generated != small && !Hidden.setSmallIcon(n, generated)) {
             return;
         }
+
+        // Clear the cached descriptor whenever our icon is to show: on Android 17
+        // getIconDescriptor() returns it before consulting the notification, so an entry cached
+        // before our substitution (an earlier bind, or the flow pipeline) would mask it.
+        // HyperGestures: only then, and only the small icon's. The people avatar's descriptor is
+        // not ours (rebuilding it costs SystemUI a shortcut lookup), and a notification we leave
+        // alone keeps what SystemUI cached for it.
+        clearSmallIconDescriptor(entry, label);
         Bundle extras = n.extras;
         if (extras != null) {
             // Stops HyperOS from replacing our icon with the launcher icon.
             extras.putBoolean("miui.isGrayscaleIcon", true);
+        }
+    }
+
+    /**
+     * The replacement for {@code small}, cached; null to leave it alone. HyperGestures: a failure
+     * to load or draw the icon (the app's package not ready, or mid-update) is not cached, so the
+     * next update tries again.
+     */
+    private Icon fixedSmallIcon(StatusBarNotification sbn, Context ctx, Icon small, int userId,
+                                String pkg, String label) {
+        String key = smallIconKey(userId, pkg, small);
+        Object cached = key == null ? null : smallIcons.get(key);
+        if (cached instanceof Fixed) {
+            return ((Fixed) cached).icon;
+        }
+        if (cached != null) {
+            return null; // NO_FIX
+        }
+        Bitmap glyph;
+        try {
+            Context appCtx = Hidden.packageContext(sbn, ctx);
+            glyph = SmallIconFixer.fix(appCtx != null ? appCtx : ctx, small, label);
+        } catch (Throwable t) {
+            Logger.v(label + ": small icon not measured (" + t + "), tried again next time");
+            return null;
+        }
+        if (glyph == null) {
+            if (key != null) {
+                smallIcons.put(key, NO_FIX);
+            }
+            return null;
+        }
+        Icon icon = Icon.createWithBitmap(glyph);
+        if (key != null) {
+            smallIcons.put(key, new Fixed(icon, glyph.getAllocationByteCount()));
+        }
+        // Our own icon maps to itself (its bitmap is counted once, above): a later pass over a
+        // notification that already carries it finds it without measuring it again.
+        String own = smallIconKey(userId, pkg, icon);
+        if (own != null) {
+            smallIcons.put(own, new Fixed(icon, ENTRY_SIZE));
+        }
+        return icon;
+    }
+
+    /**
+     * HyperGestures: the small-icon cache key, {@code user:package:icon}, where the icon part
+     * names the artwork: the resource (package and id), the bitmap (its generation id, unique in
+     * the process) or the URI. Null for an icon with no stable identity (raw data), which is then
+     * measured every time rather than cached.
+     */
+    private static String smallIconKey(int userId, String pkg, Icon icon) {
+        String id = null;
+        try {
+            switch (icon.getType()) {
+                case Icon.TYPE_RESOURCE:
+                    id = "res:" + icon.getResPackage() + ":" + Integer.toHexString(icon.getResId());
+                    break;
+                case Icon.TYPE_BITMAP:
+                case Icon.TYPE_ADAPTIVE_BITMAP:
+                    Bitmap b = icon.getBitmap();
+                    id = b == null ? null : "bmp:" + b.getGenerationId();
+                    break;
+                case Icon.TYPE_URI:
+                case Icon.TYPE_URI_ADAPTIVE_BITMAP:
+                    id = "uri:" + icon.getUri();
+                    break;
+                default:
+                    break;
+            }
+        } catch (Throwable t) {
+            Logger.v("no identity for " + icon + ": " + t);
+        }
+        return id == null ? null : userId + ":" + pkg + ":" + id;
+    }
+
+    /** HyperGestures: from {@link PackageWatcher}; drops the package's generated small icons. */
+    static void forgetPackage(String pkg) {
+        HgNotifModule self = instance;
+        if (self == null) {
+            return;
+        }
+        // The package is matched as a whole key segment: as the poster, or as the owner of an
+        // icon resource.
+        String part = ":" + pkg + ":";
+        for (String k : self.smallIcons.snapshot().keySet()) {
+            if (k.contains(part)) {
+                self.smallIcons.remove(k);
+            }
         }
     }
 
@@ -651,16 +869,14 @@ public class HgNotifModule extends XposedModule {
         return null;
     }
 
-    private void clearDescriptorCache(Object entry, String key) {
+    private void clearSmallIconDescriptor(Object entry, String label) {
         try {
             Object icons = fIcons.get(entry);
-            if (icons == null) {
-                return;
+            if (icons != null) {
+                fSmallIconDescriptor.set(icons, null);
             }
-            fSmallIconDescriptor.set(icons, null);
-            fPeopleAvatarDescriptor.set(icons, null);
         } catch (Throwable t) {
-            Logger.v(key + ": could not clear descriptor cache: " + t);
+            Logger.v(label + ": could not clear descriptor cache: " + t);
         }
     }
 
@@ -670,32 +886,13 @@ public class HgNotifModule extends XposedModule {
             return c;
         }
         if (iconManager != null) {
-            try {
-                Field f = iconManager.getClass().getDeclaredField("context");
-                f.setAccessible(true);
-                Object v = f.get(iconManager);
-                if (v instanceof Context) {
-                    c = (Context) v;
-                }
-            } catch (Throwable ignored) {
-                // Fall through to ActivityThread.
-            }
+            c = Hidden.readField(iconManager, "context", Context.class);
         }
-        if (c == null && mGetSystemUiContext != null) {
-            try {
-                Object at = Class.forName("android.app.ActivityThread")
-                        .getMethod("currentActivityThread").invoke(null);
-                Object v = mGetSystemUiContext.invoke(at);
-                if (v instanceof Context) {
-                    c = (Context) v;
-                }
-            } catch (Throwable t) {
-                Logger.v("ActivityThread context lookup failed: " + t);
-            }
+        if (c == null) {
+            c = Hidden.systemUiContext();
         }
         if (c != null) {
             sysCtx = c;
-            pm = c.getPackageManager();
             if (DUMP_BITMAPS) {
                 setUpDumpDir(c);
             }

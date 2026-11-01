@@ -28,28 +28,40 @@ final class Bitmaps {
     }
 
     /**
-     * Renders any drawable into a software bitmap.
+     * Renders any drawable into a software bitmap, no larger than {@code maxEdge} on its longer
+     * side.
      *
      * <p>{@code BitmapDrawable.getBitmap()} is deliberately not returned directly: launcher3's
      * {@code FastBitmapDrawable} and MIUI's icon pipeline hand out <b>hardware</b> bitmaps, and
      * reading pixels from or drawing those into a software canvas throws
      * {@code Software rendering doesn't support hardware bitmaps}.
+     *
+     * <p>HyperGestures: the intrinsic size is only a starting point. A vector declared at 512dp
+     * would otherwise render at ~1800px (~13 MB, and every measurement pass copies it into an
+     * int[] of the same size) on SystemUI's inflation thread, so larger artwork is drawn scaled
+     * down to {@code maxEdge}, keeping its aspect. {@code maxEdge} is also the size of a drawable
+     * with no intrinsic size.
      */
-    static Bitmap render(Drawable d, int fallbackSize) {
+    static Bitmap render(Drawable d, int maxEdge) {
         if (d == null) {
             return null;
         }
-        int w = d.getIntrinsicWidth() > 0 ? d.getIntrinsicWidth() : fallbackSize;
-        int h = d.getIntrinsicHeight() > 0 ? d.getIntrinsicHeight() : fallbackSize;
+        int w = d.getIntrinsicWidth() > 0 ? d.getIntrinsicWidth() : maxEdge;
+        int h = d.getIntrinsicHeight() > 0 ? d.getIntrinsicHeight() : maxEdge;
+        float scale = Math.min(1f, (float) maxEdge / Math.max(w, h));
+        int outW = Math.max(1, Math.round(w * scale));
+        int outH = Math.max(1, Math.round(h * scale));
         // Bounds must be restored: these drawables are live and on screen. Leaving our own bounds
         // behind wrecks the geometry the owner set up — measured on device as MIUI's AOD icons
         // sitting off-centre inside their plates, because a LayerDrawable's setLayerInset is
         // expressed relative to bounds we had overwritten.
         Rect previous = d.copyBounds();
         try {
-            Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            Bitmap out = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(out);
+            canvas.scale((float) outW / w, (float) outH / h);
             d.setBounds(0, 0, w, h);
-            d.draw(new Canvas(out));
+            d.draw(canvas);
             return out;
         } catch (Throwable t) {
             Logger.v("render(" + d.getClass().getSimpleName() + ") failed: " + t);
@@ -79,15 +91,51 @@ final class Bitmaps {
         return b.getConfig() == Bitmap.Config.HARDWARE;
     }
 
-    /** Pixels of a drawable, going through {@link #render} unless it is already readable. */
-    static Bitmap pixels(Drawable d, int fallbackSize) {
+    /**
+     * Pixels of a drawable, no larger than {@code maxEdge} on the longer side, going through
+     * {@link #render} unless it is already readable.
+     */
+    static Bitmap pixels(Drawable d, int maxEdge) {
         if (d instanceof BitmapDrawable) {
             Bitmap b = software(((BitmapDrawable) d).getBitmap());
+            if (b != null) {
+                return fit(b, maxEdge);
+            }
+        }
+        return render(d, maxEdge);
+    }
+
+    /** Scales a bitmap down, keeping its aspect, until its longer side is at most maxEdge. */
+    private static Bitmap fit(Bitmap b, int maxEdge) {
+        int w = b.getWidth();
+        int h = b.getHeight();
+        if (w <= maxEdge && h <= maxEdge) {
+            return b;
+        }
+        float scale = (float) maxEdge / Math.max(w, h);
+        try {
+            return Bitmap.createScaledBitmap(b, Math.max(1, Math.round(w * scale)),
+                    Math.max(1, Math.round(h * scale)), true);
+        } catch (Throwable t) {
+            Logger.v("downscale failed: " + t);
+            return b;
+        }
+    }
+
+    /**
+     * HyperGestures: what identifies a drawable's artwork for caching: the bitmap of a
+     * {@link BitmapDrawable}, else its {@link Drawable.ConstantState} (shared by every drawable
+     * loaded from the same resource). Neither overrides equals, so they key by identity. Null
+     * when the drawable has neither.
+     */
+    static Object identity(Drawable d) {
+        if (d instanceof BitmapDrawable) {
+            Bitmap b = ((BitmapDrawable) d).getBitmap();
             if (b != null) {
                 return b;
             }
         }
-        return render(d, fallbackSize);
+        return d == null ? null : d.getConstantState();
     }
 
     /** Crops away a fully transparent border. Returns null when nothing is visible. */
@@ -211,29 +259,6 @@ final class Bitmaps {
             }
         }
         return (float) solid / px.length;
-    }
-
-    /** True when the bitmap's visible pixels carry no meaningful chroma. */
-    static boolean isMonochrome(Bitmap b) {
-        if (b == null) {
-            return true;
-        }
-        int w = b.getWidth();
-        int h = b.getHeight();
-        int[] px = new int[w * h];
-        b.getPixels(px, 0, w, 0, 0, w, h);
-        for (int p : px) {
-            if (Color.alpha(p) <= ALPHA_FLOOR) {
-                continue;
-            }
-            int r = Color.red(p);
-            int g = Color.green(p);
-            int bl = Color.blue(p);
-            if (Math.abs(r - g) >= 20 || Math.abs(r - bl) >= 20 || Math.abs(g - bl) >= 20) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**

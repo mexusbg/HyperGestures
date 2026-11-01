@@ -122,7 +122,8 @@ public class HgTaskLockSwipeController<T extends Context & RecentsViewContainer>
     }
 
     private boolean onActionDown(MotionEvent ev) {
-        if (!HgRecentsSettings.isOn(mContainer, HgRecentsSettings.CARD_LOCK_SWIPE)) return false;
+        // Only asked while the swipe-down lock is on: HgSwipeDownController read the setting at
+        // this touch-down and picked this controller; no second read.
         if ((ev.getEdgeFlags() & Utilities.EDGE_NAV_BAR) != 0) return false;
         if (!DisplayController.getNavigationMode(mContainer).hasGestures) return false;
         if (mReleaseAnim != null && mReleaseAnim.isRunning()) mReleaseAnim.end();

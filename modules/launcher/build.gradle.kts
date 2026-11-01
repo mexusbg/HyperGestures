@@ -39,7 +39,8 @@ plugins {
 }
 
 val l3 = "aosp/launcher3"
-val hgManifest = rootProject.file("hg/launcher/src/main/AndroidManifest.xml")
+val hgManifestPath = "hg/launcher/src/main/AndroidManifest.xml"
+val hgManifest = rootProject.file(hgManifestPath)
 
 aospApp("com.android.launcher3", "com.hypergestures") {
     java = listOf(
@@ -57,6 +58,8 @@ aospApp("com.android.launcher3", "com.hypergestures") {
     )
     res = listOf("$l3/quickstep/res", "hg/launcher/src/main/res")
     manifest = "$l3/quickstep/AndroidManifest.xml"
+    // Set on the build-type source sets below, so checkPrivateRes would not see it otherwise.
+    checkedXml = listOf(hgManifestPath)
 }
 
 android {
@@ -95,6 +98,20 @@ android {
     // Soong does not gate the build on lint; lintVital over ~308k LOC of vendored code would only
     // re-report upstream's own baseline (aosp/launcher3/lint-baseline.xml).
     lint.checkReleaseBuilds = false
+    // Files nothing reads at runtime (all four ABIs' native code stays: owner, 2026-10-31).
+    // Java resources: protobuf-javalite's well-known-type sources (google/protobuf/*.proto; lite
+    // has no descriptors to read them into) and kotlinx-coroutines' DebugProbesKt.bin (loaded only
+    // by its JVM debug agent).
+    packaging.resources.excludes += listOf("google/protobuf/*.proto", "DebugProbesKt.bin")
+    // An asset: appfunctions-service's app_functions_schema.xsd, named only by the
+    // android.app.appfunctions.schema property of its two app-function services (for the system's
+    // AppSearch indexer), which the hg manifest removes. Assets go through aapt's ignore patterns,
+    // and setting any replaces its default list, so that list comes first.
+    androidResources.ignoreAssetsPatterns += listOf(
+        "!.svn", "!.git", "!.ds_store", "!*.scc", ".*", "<dir>_*", "!CVS", "!thumbs.db",
+        "!picasa.ini", "!*~",
+        "!app_functions_schema.xsd",
+    )
 }
 
 // The HyperOS build this APK was made for (tools/framework-stub/device-build.txt `fingerprint=`, the
@@ -237,7 +254,9 @@ dependencies {
 // as Exec tasks over the release outputs and finalize assembleRelease (they fail the build;
 // assembleRelease itself already succeeded, so a finalizer is the natural place — the checks
 // don't gate whether the APK gets built, only whether the invocation as a whole is green). Same
-// `hg.python`/HG_PYTHON convention as checkPrivateRes (AospModule.kt).
+// `hg.python`/HG_PYTHON convention as checkPrivateRes (AospModule.kt). Like checkPrivateRes, each
+// writes a stamp once it passed and declares every file it reads (the tools' own Python sources
+// included), so it is up to date, and skipped, until one of them changes.
 val python = providers.gradleProperty("hg.python")
     .orElse(providers.environmentVariable("HG_PYTHON"))
     .orElse("python")
@@ -250,6 +269,9 @@ val androidJar = androidComponents.sdkComponents.bootClasspath.map { jars ->
 val mergedManifestRelease =
     layout.buildDirectory.file("intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml")
 val releaseApk = layout.buildDirectory.file("outputs/apk/release/launcher-release.apk")
+// tools/hgtools' modules (the checks import each other and sdk.py), not its tests.
+val hgtoolsSources = fileTree(rootProject.file("tools/hgtools")) { include("*.py") }
+val checkStamps = layout.buildDirectory.dir("hg")
 
 val shadowCheck = tasks.register("shadowCheck", Exec::class.java) {
     group = "verification"
@@ -258,6 +280,10 @@ val shadowCheck = tasks.register("shadowCheck", Exec::class.java) {
     inputs.file(releaseApk).withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(rootProject.file("prebuilts/device/framework-classes.txt")).withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(androidJar).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(hgtoolsSources).withPathSensitivity(PathSensitivity.RELATIVE)
+    val stamp = checkStamps.map { it.file("shadowCheck.ok") }
+    outputs.file(stamp)
+    doLast { stamp.get().asFile.writeText("ok\n") }
     workingDir = rootProject.rootDir
     executable = python.get()
     args(
@@ -265,22 +291,33 @@ val shadowCheck = tasks.register("shadowCheck", Exec::class.java) {
         "--apk", releaseApk.get().asFile.absolutePath,
         "--framework-classes", rootProject.file("prebuilts/device/framework-classes.txt").absolutePath,
     )
-    argumentProviders.add(CommandLineArgumentProvider { listOf("--android-jar", androidJar.get().absolutePath) })
+    val jar = androidJar // a local: a provider reading the script's own property holds the script
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf("--android-jar", jar.get().absolutePath)
+    })
 }
 
 // Checks both the merged manifest and the one packaged in the APK (aapt2 dump xmltree; aapt2 is
-// found the way the Gradle build finds the SDK, tools/hgtools/sdk.py).
+// found the way the Gradle build finds the SDK, tools/hgtools/sdk.py), and the recents
+// FileProvider's paths (screenshot sharing): no root-path, no whole directory.
+val fileProviderPaths = rootProject.file("$l3/quickstep/res/xml/overview_file_provider_paths.xml")
 val manifestContract = tasks.register("manifestContract", Exec::class.java) {
     group = "verification"
     description = "Fails on manifest surfaces this recents-only app must not expose (spec §6.1)."
     dependsOn("assembleRelease")
     inputs.file(mergedManifestRelease).withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(releaseApk).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(fileProviderPaths).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(hgtoolsSources).withPathSensitivity(PathSensitivity.RELATIVE)
+    val stamp = checkStamps.map { it.file("manifestContract.ok") }
+    outputs.file(stamp)
+    doLast { stamp.get().asFile.writeText("ok\n") }
     workingDir = rootProject.rootDir
     executable = python.get()
     args(
         "-m", "tools.hgtools.manifest_contract", mergedManifestRelease.get().asFile.absolutePath,
         "--apk", releaseApk.get().asFile.absolutePath,
+        "--file-provider-paths", fileProviderPaths.absolutePath,
     )
 }
 
@@ -288,8 +325,10 @@ val manifestContract = tasks.register("manifestContract", Exec::class.java) {
 // move on an OTA: fails on any private framework resource ID left in the release dex that is not
 // allowlisted, and on an allowlist entry whose ID no longer matches prebuilts/device (or, for the
 // XML refs, the SDK android.jar). docs/research/private-resource-ids.md; aapt2 is found as
-// manifestContract finds it.
+// manifestContract finds it. That framework-res.apk must be the one tools/framework-stub/
+// device-build.txt records (its sha256), or the IDs would be checked against other firmware.
 val deviceFrameworkRes = rootProject.file("prebuilts/device/framework-res.apk")
+val deviceBuildStamp = rootProject.file("tools/framework-stub/device-build.txt")
 val privateResIdsAllowlist = rootProject.file("tools/hgtools/private-res-ids-allowlist.txt")
 val privateResIdCheck = tasks.register("privateResIdCheck", Exec::class.java) {
     group = "verification"
@@ -298,7 +337,15 @@ val privateResIdCheck = tasks.register("privateResIdCheck", Exec::class.java) {
     inputs.file(releaseApk).withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(deviceFrameworkRes).withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(privateResIdsAllowlist).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(deviceBuildStamp).withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(androidJar).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(hgtoolsSources).withPathSensitivity(PathSensitivity.RELATIVE)
+    val stamp = checkStamps.map { it.file("privateResIdCheck.ok") }
+    outputs.file(stamp)
+    val res = deviceFrameworkRes
+    val build = deviceBuildStamp
+    doFirst { verifyDeviceFrameworkRes(res, build) }
+    doLast { stamp.get().asFile.writeText("ok\n") }
     workingDir = rootProject.rootDir
     executable = python.get()
     args(
@@ -306,8 +353,9 @@ val privateResIdCheck = tasks.register("privateResIdCheck", Exec::class.java) {
         "--device-res", deviceFrameworkRes.absolutePath,
         "--allowlist", privateResIdsAllowlist.absolutePath,
     )
+    val jar = androidJar // a local, as in shadowCheck
     argumentProviders.add(CommandLineArgumentProvider {
-        listOf("--sdk-platform", androidJar.get().parentFile.absolutePath)
+        listOf("--sdk-platform", jar.get().parentFile.absolutePath)
     })
 }
 

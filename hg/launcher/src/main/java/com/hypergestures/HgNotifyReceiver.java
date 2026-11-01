@@ -3,6 +3,7 @@ package com.hypergestures;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -10,6 +11,8 @@ import android.graphics.drawable.Icon;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import android.widget.Toast;
+
+import com.android.quickstep.HgSettingsActivity;
 
 /**
  * Posts the module's notices (rollback, "reboot to switch gestures", firmware) as this app, on its
@@ -76,6 +79,7 @@ public final class HgNotifyReceiver extends BroadcastReceiver {
                     .setContentText(text)
                     .setStyle(new Notification.BigTextStyle().bigText(text))
                     .setCategory(Notification.CATEGORY_STATUS)
+                    .setContentIntent(settingsIntent(context))
                     .setAutoCancel(true)
                     .build();
             nm.notify(tag, ID, n);
@@ -86,6 +90,17 @@ public final class HgNotifyReceiver extends BroadcastReceiver {
             return false;
         }
         return true;
+    }
+
+    /**
+     * A tap opens the settings page (its status card says what the notice is about), and
+     * auto-cancel then clears the notice. A PendingIntent, unlike the icon, needs nothing from our
+     * APK in SystemUI: the system starts the activity as us.
+     */
+    private static PendingIntent settingsIntent(Context context) {
+        Intent open = new Intent(context, HgSettingsActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE);
     }
 
     /**

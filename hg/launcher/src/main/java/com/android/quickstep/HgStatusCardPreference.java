@@ -64,27 +64,35 @@ final class HgStatusCardPreference extends Preference {
         }
         LinearLayout rows = (LinearLayout) holder.findViewById(R.id.hg_status_rows);
         if (rows == null) return;
-        rows.removeAllViews();
         rows.setVisibility(mItems.isEmpty() ? View.GONE : View.VISIBLE);
+        // Rows and dividers alternate (row, line, row...); the ones a previous bind made are
+        // rebound in place, missing ones added and extra ones removed, so a rebind (every resume
+        // and status refresh) re-inflates nothing it already has.
         Context ctx = rows.getContext();
-        LayoutInflater inflater = LayoutInflater.from(ctx);
+        LayoutInflater inflater = null;
         int divider = ctx.getResources().getDimensionPixelSize(R.dimen.hg_status_divider);
         for (int i = 0; i < mItems.size(); i++) {
-            if (i > 0) {
+            if (i > 0 && rows.getChildAt(2 * i - 1) == null) {
                 View line = new View(ctx);
                 line.setBackgroundColor(ctx.getColor(R.color.hg_status_divider));
                 rows.addView(line, new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, divider));
             }
+            View row = rows.getChildAt(2 * i);
+            if (row == null) {
+                if (inflater == null) inflater = LayoutInflater.from(ctx);
+                row = inflater.inflate(R.layout.hg_status_row, rows, false);
+                row.setScreenReaderFocusable(true); // TalkBack reads label and value as one
+                rows.addView(row);
+            }
             Item item = mItems.get(i);
-            View row = inflater.inflate(R.layout.hg_status_row, rows, false);
             ((TextView) row.findViewById(R.id.hg_status_label)).setText(item.label);
             ((TextView) row.findViewById(R.id.hg_status_value)).setText(item.value);
             row.findViewById(R.id.hg_status_dot).getBackground().mutate()
                     .setTint(ctx.getColor(dotColor(item.level)));
-            row.setScreenReaderFocusable(true); // TalkBack reads label and value as one
-            rows.addView(row);
         }
+        int used = Math.max(0, 2 * mItems.size() - 1);
+        if (rows.getChildCount() > used) rows.removeViews(used, rows.getChildCount() - used);
     }
 
     private static int dotColor(int level) {

@@ -32,12 +32,13 @@ class SdkTest(unittest.TestCase):
         newest = self.tool("37.0.0", "aapt2")
         (self.tmp / "other").mkdir()
         os.environ["ANDROID_HOME"] = str(self.tmp / "other")
-        (self.root / "local.properties").write_text(f"sdk.dir={self.sdk.as_posix()}\n")
+        (self.root / "local.properties").write_text(f"sdk.dir={self.sdk.as_posix()}\n",
+                                                    encoding="utf-8")
         self.assertEqual(sdk.find_aapt2(self.root), newest)
 
     def test_escaped_windows_sdk_dir(self):
         text = "sdk.dir=" + str(self.sdk).replace("\\", "\\\\").replace(":", "\\:") + "\n"
-        (self.root / "local.properties").write_text(text)
+        (self.root / "local.properties").write_text(text, encoding="utf-8")
         self.assertEqual(sdk.sdk_dir(self.root), self.sdk)
 
     def test_android_home_without_local_properties(self):

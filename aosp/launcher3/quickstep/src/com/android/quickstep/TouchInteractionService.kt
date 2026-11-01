@@ -38,6 +38,9 @@ class TouchInteractionService : Service() {
             appComponent.sysUIConnectionComponentBuilder.setConnectionCleaner(cleanupTask).build()
         appComponent.sysUIConnectionTracker.setActiveComponent(component)
         handler = component.touchInteractionHandler
+        // HyperGestures: read HyperOS Shell's binder codes from the phone before SystemUI's
+        // onInitialize needs them (HgShellInterfaces), on a helper thread.
+        HgShellInterfaces.prewarm()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) =

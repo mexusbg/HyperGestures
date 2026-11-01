@@ -562,11 +562,21 @@ constructor(
     // open on the side of the finger.
     private var hgLastDownX = -1f
 
+    /**
+     * HyperGestures: whether this card shows the app header (HgTaskHeader), as its chips were
+     * inflated (IconAppChipView.isHgHeader): the header's taps, the touch room above the cards and
+     * the hold buttons follow it, not a setting toggled since.
+     */
+    val hgHasHeader: Boolean
+        get() = ::taskContainers.isInitialized && taskContainers.any { it.iconView.isHgHeader }
+
+    /** HyperGestures: the windowing mode of each of this card's tasks. */
+    private fun hgWindowingModes(): IntArray =
+        taskContainers.map { it.task.key.windowingMode }.toIntArray()
+
     /** HyperGestures: whether this card's app is in HyperOS's split screen (HgSystemSplitLaunch). */
     private fun hgInSystemSplit(): Boolean =
-        com.android.quickstep.HgSystemSplitLaunch.inSystemSplit(
-            taskContainers.map { it.task.key.windowingMode }.toIntArray()
-        )
+        com.android.quickstep.HgSystemSplitLaunch.inSystemSplit(hgWindowingModes())
 
     /**
      * HyperGestures: opening a card in HyperOS's split screen, or into the empty half of its
@@ -1395,9 +1405,9 @@ constructor(
 
     protected fun setIcon(iconView: IconAppChipView, icon: Drawable?) {
         with(iconView) {
-            if (icon != null && com.android.quickstep.HgTaskHeader.isOn(context)) {
+            if (icon != null && isHgHeader) {
                 // HyperGestures: a header, not a menu button (HgTaskHeader); holding the card
-                // opens the round action buttons.
+                // opens the round action buttons. The chip's own snapshot, not the setting.
                 setDrawable(icon)
                 setOnClickListener(null)
                 setOnLongClickListener(null)
@@ -1458,10 +1468,7 @@ constructor(
         // launch animation below would never end for it and recents would stop taking taps.
         val hgRecents = recentsView
         if (
-            hgRecents != null &&
-                com.android.quickstep.HgFloatingCard.isFloating(
-                    taskContainers.map { it.task.key.windowingMode }.toIntArray()
-                )
+            hgRecents != null && com.android.quickstep.HgFloatingCard.isFloating(hgWindowingModes())
         ) {
             com.android.quickstep.HgFloatingCard.launch(hgRecents, taskContainers[0].task)
             return RunnableList().also { it.executeAllAndDestroy() }
@@ -1600,7 +1607,7 @@ constructor(
                 options.launchWindowingMode =
                     com.android.quickstep.HgSystemSplitLaunch.launchWindowingMode(
                         com.android.quickstep.HgSystemSplitLaunch.keepsWindowingMode(
-                            taskContainers.map { it.task.key.windowingMode }.toIntArray()
+                            hgWindowingModes()
                         )
                     )
             }
@@ -2226,14 +2233,18 @@ constructor(
      * belong to animations that have ended: back to 0. The hold buttons' slide aside stays only
      * while they are open ([menuOpen]). The composed translation and scale are applied again, so
      * an animator that wrote the view's translationX directly (AOSP's launch parallax) cannot
-     * leave the card shifted. Returns the card's terms before, for the settle log line.
+     * leave the card shifted. Returns the card's terms before, for the settle log line, if
+     * [describe] (verbose logging, the front card only), else null.
      */
-    fun hgSettleStack(menuOpen: Boolean): String {
+    fun hgSettleStack(menuOpen: Boolean, describe: Boolean): String? {
         val terms =
-            "offset=$hgStackOffset dismissX=$dismissTranslationX " +
-                "taskOffsetX=$taskOffsetTranslationX resistanceX=$taskResistanceTranslationX " +
-                "actionsX=$hgActionsTranslationX stackX=$hgStackTranslationX " +
-                "translationX=$translationX"
+            if (!describe) null
+            else
+                "offset=$hgStackOffset dismissX=$dismissTranslationX " +
+                    "taskOffsetX=$taskOffsetTranslationX " +
+                    "resistanceX=$taskResistanceTranslationX " +
+                    "actionsX=$hgActionsTranslationX stackX=$hgStackTranslationX " +
+                    "translationX=$translationX"
         if (!isBeingDismissed && !hgDismissDragging && dismissTranslationX != 0f) {
             dismissTranslationX = 0f
         }
@@ -2247,7 +2258,10 @@ constructor(
     /**
      * HyperGestures: the running app's live tile is its own surface below recents (HgLiveTile):
      * give its simulator the card's stack scale and offset too: the running card is the newest,
-     * in front or on the newer side, sliding out as an older card comes to the front.
+     * in front or on the newer side, sliding out as an older card comes to the front. Only the
+     * values: RecentsView.dispatchDraw redraws the live tile in every frame it draws, so a change
+     * asks for that frame (invalidate; a card's own property change alone does not redraw
+     * RecentsView) instead of a surface transaction per setter, several a frame while it moves.
      */
     fun hgMirrorStackToLiveTile() {
         val recentsView = recentsView ?: return
@@ -2256,7 +2270,7 @@ constructor(
         recentsView.runActionOnRemoteHandles { handle ->
             if (hgCopyStackTo(handle.taskViewSimulator, 1f)) changed = true
         }
-        if (changed) recentsView.redrawLiveTile()
+        if (changed) recentsView.invalidate()
     }
 
     /**

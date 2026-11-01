@@ -112,10 +112,6 @@ public final class HgVerticalLayout {
         mCount = count;
     }
 
-    public int getTaskCount() {
-        return mCount;
-    }
-
     /**
      * The progress of a dismissed card's removal, 0 (none pending) to 1 (about to be removed):
      * the cards that stay ease into their layout without it (a lone card's centring) meanwhile.

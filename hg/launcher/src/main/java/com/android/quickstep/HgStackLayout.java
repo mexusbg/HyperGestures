@@ -132,16 +132,6 @@ public final class HgStackLayout {
         return Math.round(CARD_TOP * windowHeight);
     }
 
-    /** One (1) or two (2) pages older: the card's rest edge, of W ([video]). */
-    public static float olderEdge(int pages) {
-        return OLDER_EDGES[pages - 1];
-    }
-
-    /** One (1) or two (2) pages older: the card's rest scale ([video]). */
-    public static float olderScale(int pages) {
-        return OLDER_SCALES[pages - 1];
-    }
-
     /**
      * The card's depth in the deck: 0 in focus, 1 one card behind, negative for newer cards on
      * top. {@code offset} is the card's screen x offset from the focused card's place in the

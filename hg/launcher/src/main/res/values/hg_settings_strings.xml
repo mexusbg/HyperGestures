@@ -57,6 +57,9 @@
     <string name="hg_status_problem_battery_value">No restrictions pending</string>
     <string name="hg_status_problem_restore">Restore</string>
     <string name="hg_status_problem_restore_value">Failed, undo by hand</string>
+    <!-- Shown only when a HyperOS feature fell back on this firmware (HgShellInterfaces). -->
+    <string name="hg_status_firmware">Firmware compatibility</string>
+    <string name="hg_status_firmware_fallback">Some HyperOS features fall back: %1$s</string>
     <string name="hg_status_recents">Recents provider</string>
     <string name="hg_status_gestures">Gestures &amp; back</string>
     <string name="hg_status_by_us">HyperGestures</string>
@@ -210,6 +213,9 @@
     <string name="hg_settings_kofi_url" translatable="false">https://ko-fi.com/mexus</string>
     <!-- Toast when no app can open the author, Ko-fi or license link -->
     <string name="hg_settings_no_browser">No browser to open the link</string>
+    <!-- Spoken by TalkBack after the author, license and Ko-fi rows (the web-link mark at
+         their end): a tap leaves the app for the browser -->
+    <string name="hg_settings_opens_in_browser">Opens in browser</string>
     <!-- About line when the module runs a newer version than this app: the system kept the
          previous app. Its summary: our versionCode and the module's, e.g. "49", "50" -->
     <string name="hg_settings_update_not_applied">Update not applied</string>

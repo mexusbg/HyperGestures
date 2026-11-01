@@ -34,6 +34,8 @@ if [ -z "$SRC" ]; then
   MSYS2_ARG_CONV_EXCL='*' adb pull /system/framework/framework.jar "$SRC"
 fi
 [ -f "$SRC" ] || { echo "framework.jar not found: $SRC" >&2; exit 1; }
+# Absolute: the dex extraction below unzips it from inside a temp dir.
+SRC="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
 
 RES="${2:-}"
 if [ -z "$RES" ] && [ -n "${1:-}" ] && [ -f "$(dirname "$SRC")/framework-res.apk" ]; then
@@ -105,20 +107,33 @@ stop_hint() {
   exit 1
 }
 
+# Written to temp files and renamed into place, so a failure never leaves a half-written stub. Every
+# entry gets the same fixed timestamp (as AddInnerClasses gives its own), so the same device
+# framework.jar always yields the same stub bytes.
 "$PY" - "$WORK" "$OUT/framework.jar" "$OUT/framework-classes.txt" <<'PY' || stop_hint
 import sys, zipfile, glob, os
 work, out_jar, out_list = sys.argv[1], sys.argv[2], sys.argv[3]
 seen = set()
-with zipfile.ZipFile(out_jar, "w", zipfile.ZIP_DEFLATED) as out:
-    for jar in sorted(glob.glob(os.path.join(work, "classes*.jar"))):
-        with zipfile.ZipFile(jar) as z:
-            for name in z.namelist():
-                if name.endswith(".class") and name not in seen:
-                    seen.add(name)
-                    out.writestr(name, z.read(name))
-with open(out_list, "w", newline="\n") as f:
-    for name in sorted(seen):
-        f.write(name[:-len(".class")] + "\n")
+tmp_jar, tmp_list = out_jar + ".tmp", out_list + ".tmp"
+try:
+    with zipfile.ZipFile(tmp_jar, "w", zipfile.ZIP_DEFLATED) as out:
+        for jar in sorted(glob.glob(os.path.join(work, "classes*.jar"))):
+            with zipfile.ZipFile(jar) as z:
+                for name in z.namelist():
+                    if name.endswith(".class") and name not in seen:
+                        seen.add(name)
+                        info = zipfile.ZipInfo(name, date_time=(1980, 2, 1, 0, 0, 0))
+                        info.compress_type = zipfile.ZIP_DEFLATED
+                        out.writestr(info, z.read(name))
+    with open(tmp_list, "w", encoding="utf-8", newline="\n") as f:
+        for name in sorted(seen):
+            f.write(name[:-len(".class")] + "\n")
+    os.replace(tmp_jar, out_jar)
+    os.replace(tmp_list, out_list)
+finally:
+    for tmp in (tmp_jar, tmp_list):
+        if os.path.exists(tmp):
+            os.remove(tmp)
 print(f"{len(seen)} classes -> {out_jar}")
 PY
 

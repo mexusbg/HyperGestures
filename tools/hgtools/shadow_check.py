@@ -121,7 +121,7 @@ def jar_classes(jar: Path) -> set[str]:
 def boot_classes(framework_classes_txt: Path, android_jar: Path) -> set[str]:
     lines = {
         line.strip()
-        for line in framework_classes_txt.read_text().splitlines()
+        for line in framework_classes_txt.read_text(encoding="utf-8").splitlines()
         if line.strip()
     }
     return lines | jar_classes(android_jar)

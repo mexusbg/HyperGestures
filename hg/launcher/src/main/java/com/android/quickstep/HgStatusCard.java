@@ -21,6 +21,9 @@
 // - Then a row per problem the module reports, only while it stands (owner, 2026-10-30: the
 //   module's status lives in this card, not in About): a metamodule that did not mount the app,
 //   battery "No restrictions" not set yet, an undo that failed for good.
+// - Then "Firmware compatibility", only when something fell back after an OTA: a HyperOS call the
+//   phone's Shell no longer confirms (HgShellCalls), or a compiled-in Shell code that differs
+//   from the phone's (HgShellInterfaces.aospMismatches). Silent while everything matches.
 package com.android.quickstep;
 
 import java.util.ArrayList;
@@ -59,6 +62,8 @@ final class HgStatusCard {
     static final int PROBLEM_BATTERY = 22;
     /** Undoing the module's changes failed for good. */
     static final int PROBLEM_RESTORE = 23;
+    /** Some HyperOS features fall back on this firmware (detail: which, and why). */
+    static final int FIRMWARE_FALLBACK = 24;
     /** Recents provider, Gestures & back: HyperGestures. */
     static final int BY_US = 4;
     /** Recents provider, Gestures & back: the system's (MiuiHome). */
@@ -257,5 +262,16 @@ final class HgStatusCard {
     static Row reboot(List<Integer> reasons) {
         return reasons.isEmpty() ? new Row(REBOOT_NOT_NEEDED, OK)
                 : new Row(REBOOT_PENDING, PENDING, Collections.emptyList(), reasons, "");
+    }
+    /**
+     * The "Firmware compatibility" row: null while every HyperOS call is confirmed and every
+     * compiled-in code matches; else amber, naming the features that fell back, then the
+     * mismatches.
+     */
+    static Row firmware(List<String> unusableFeatures, List<String> aospMismatches) {
+        if (unusableFeatures.isEmpty() && aospMismatches.isEmpty()) return null;
+        List<String> all = new ArrayList<>(unusableFeatures);
+        all.addAll(aospMismatches);
+        return new Row(FIRMWARE_FALLBACK, PENDING, String.join(", ", all));
     }
 }

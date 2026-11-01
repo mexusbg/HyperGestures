@@ -118,7 +118,9 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
             // The App info trampoline's component follows its switch the same way (adb).
             HgAppInfoTrampoline.syncComponentLater(ctx);
         }
-        HgSettingsMigration.run(ctx); // layout copied from HyperOS once; dropped switch keys
+        // Layout copied from HyperOS once, dropped switch keys deleted; off the main thread, as
+        // nothing on the page waits for it (HgSettingsMigration).
+        HgSettingsMigration.runLater(ctx);
 
         mStatusCard = new HgStatusCardPreference(ctx); // follows the mode (updateSections)
         screen.addPreference(mStatusCard);
@@ -436,6 +438,10 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
                 item(items, app, problemLabel(problem.value), problem);
             }
         }
+        // Only when something fell back on this firmware (HgShellInterfaces; this helper thread).
+        HgStatusCard.Row firmware = HgStatusCard.firmware(
+                HgShellInterfaces.unusableFeatureLabels(), HgShellInterfaces.aospMismatches());
+        if (firmware != null) item(items, app, R.string.hg_status_firmware, firmware);
         return items;
     }
 
@@ -488,6 +494,8 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
                 return app.getString(R.string.hg_status_problem_battery_value);
             case HgStatusCard.PROBLEM_RESTORE:
                 return app.getString(R.string.hg_status_problem_restore_value);
+            case HgStatusCard.FIRMWARE_FALLBACK:
+                return app.getString(R.string.hg_status_firmware_fallback, row.detail);
             case HgStatusCard.BY_US:
                 return app.getString(R.string.hg_status_by_us);
             case HgStatusCard.BY_SYSTEM:

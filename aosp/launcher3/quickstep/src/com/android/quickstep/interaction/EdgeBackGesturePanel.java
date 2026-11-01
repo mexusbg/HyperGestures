@@ -250,6 +250,7 @@ public class EdgeBackGesturePanel extends View {
         super(context);
 
         mDensity = context.getResources().getDisplayMetrics().density;
+        // HyperGestures: MiuiHome's ticks, its arrow, and the AOSP arrow's size to go back to.
         mHgHaptics = new HgBackHaptics(context);
         mHgMiuiArrow = new HgMiuiBackArrow(this);
         mHgAospWidth = layoutParams.width;
@@ -313,7 +314,7 @@ public class EdgeBackGesturePanel extends View {
     }
 
     void onDestroy() {
-        mHgMiuiArrow.cancel();
+        mHgMiuiArrow.cancel(); // HyperGestures: stop the MIUI arrow's animations
         ViewGroup parent = (ViewGroup) getParent();
         if (parent != null) {
             parent.removeView(this);
@@ -409,6 +410,7 @@ public class EdgeBackGesturePanel extends View {
         super.onConfigurationChanged(newConfig);
         updateArrowDirection();
         loadDimens();
+        // HyperGestures: the MIUI arrow's sizes for the new density too.
         mHgMiuiArrow.loadDimens(getResources().getDisplayMetrics().density);
     }
 
@@ -483,14 +485,19 @@ public class EdgeBackGesturePanel extends View {
     }
 
     private void triggerBack() {
-        if (mBackCallback != null) {
-            mBackCallback.triggerBack();
-        }
+        // HyperGestures: the handler reports whether back was sent; it may refuse it
+        // (HgBackPolicy.canCommit, a recents animation running or just finished).
+        boolean hgSent = mBackCallback == null || mBackCallback.triggerBack();
 
         if (mVelocityTracker == null) {
             mVelocityTracker = VelocityTracker.obtain();
         }
         mVelocityTracker.computeCurrentVelocity(1000);
+        if (!hgSent) {
+            // HyperGestures: no back, so no hand-up tick or commit animation: leave as a cancel.
+            hgHideAsCancelled();
+            return;
+        }
         // HyperGestures: MiuiHome's hand-up tick, dropped within 140 ms of the ready tick, in
         // place of AOSP's click on a slow or late release.
         mHgHaptics.onBackTriggered();
@@ -540,6 +547,11 @@ public class EdgeBackGesturePanel extends View {
         if (mBackCallback != null) {
             mBackCallback.cancelBack();
         }
+        hgHideAsCancelled();
+    }
+
+    // HyperGestures: cancelBack's arrow exit, split out for a back the handler refused to send.
+    private void hgHideAsCancelled() {
         if (mHgMiuiStyle) {
             mHgMiuiArrow.onRelease(mHgInwardTravel);
             return;
@@ -778,8 +790,11 @@ public class EdgeBackGesturePanel extends View {
 
     /** Callback to let the gesture handler react to the detected back gestures. */
     interface BackCallback {
-        /** Indicates that a Back gesture was recognized. */
-        void triggerBack();
+        /**
+         * Indicates that a Back gesture was recognized.
+         * HyperGestures: @return whether back was sent; false plays the cancel exit instead.
+         */
+        boolean triggerBack();
 
         /** Indicates that the gesture was cancelled. */
         void cancelBack();

@@ -7,7 +7,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 A=aosp
 PY="${HG_PYTHON:-python}"
-rm -rf flags/src/main/java
+# Generated into a temporary dir next to the output and swapped in only when the generator
+# succeeded, so a failed run leaves the previous sources (and VALUES.md) as they were.
+TMP="$(mktemp -d flags/.gen.XXXXXX)"
+trap 'rm -rf "$TMP"' EXIT
 "$PY" -m tools.hgtools.aconfig_gen \
   --decl $A/launcher3/aconfig/*.aconfig \
          $A/frameworks-base/packages/SystemUI/aconfig/*.aconfig \
@@ -33,10 +36,14 @@ rm -rf flags/src/main/java
   --chain flags/values/aosp-chain.txt \
   --device flags/values/device.txt \
   --overrides flags/values/project-overrides.txt \
-  --out flags/src/main/java \
-  --report flags/VALUES.md
+  --out "$TMP/java" \
+  --report "$TMP/VALUES.md"
+[ -d "$TMP/java" ] && [ -f "$TMP/VALUES.md" ] || { echo "gen-flags: nothing generated" >&2; exit 1; }
+rm -rf flags/src/main/java
+mv "$TMP/java" flags/src/main/java
+mv -f "$TMP/VALUES.md" flags/VALUES.md
 
-# NOTE on deviations from the brief's draft (see task-2-report.md for full evidence):
+# Why some .aconfig files are named one by one rather than globbed:
 #  - android/companion/virtual/flags/*.aconfig is listed file-by-file (not globbed) to exclude
 #    deprecated_flags_do_not_edit.aconfig, which declares package "android.companion.virtual.flags" —
 #    not one of the 15 packages in build map §2.1 (the real package, "android.companion.virtualdevice.flags",

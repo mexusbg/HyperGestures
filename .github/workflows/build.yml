@@ -7,25 +7,39 @@ on:
   pull_request:
   workflow_dispatch:
 
-# contents: write only so a tag build can publish its release (the step is skipped otherwise).
+# Read-only by default (pull requests included). Only the publish job may write (contents:
+# write); it runs for tags alone and no third-party code but download-artifact.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
+# Every action is pinned to a full commit SHA (the tag it was taken from in the comment), so a
+# moved tag can't change what runs here.
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      # The release key signs only tag builds and pushes to master. Everything else (pull
+      # requests, manual runs on other branches) signs with a throwaway key made in this job, so
+      # no other build ever sees the release key or its passwords.
+      HG_RELEASE_BUILD: >-
+        ${{ (startsWith(github.ref, 'refs/tags/v')
+        || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && '1' || '' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
       # Xiaomi's framework files (compile-only stub, framework-res.apk, class list) can't live in
       # this repo; they come from a private repo, read with a read-only deploy key.
       - name: Check out device prebuilts
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: mexusbg/HyperGestures-prebuilts
           ssh-key: ${{ secrets.PREBUILTS_DEPLOY_KEY }}
@@ -47,17 +61,17 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: "platforms;android-37.0 build-tools;37.0.0"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       # gradle.properties asks for an 8 GB Gradle daemon and a 6 GB Kotlin daemon (sized for a
       # desktop); the hosted runner has less memory, so run Kotlin in the Gradle daemon instead.
@@ -70,7 +84,10 @@ jobs:
             echo "org.gradle.workers.max=2"
           } >> ~/.gradle/gradle.properties
 
+      # buildSrc's HgSigning.kt signs with the keystore in HG_KEYSTORE (with HG_KEYSTORE_PASSWORD,
+      # HG_KEY_ALIAS and HG_KEY_PASSWORD).
       - name: Release signing key
+        if: env.HG_RELEASE_BUILD == '1'
         env:
           KEYSTORE_B64: ${{ secrets.HG_RELEASE_KEYSTORE_B64 }}
         run: |
@@ -81,41 +98,122 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "HG_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
+      # Not a release build: a key made for this job alone, so no secret is needed and fork or
+      # Dependabot pull requests sign too (their APKs install over nothing release-signed).
+      - name: Throwaway signing key
+        if: env.HG_RELEASE_BUILD != '1'
+        run: |
+          pass="$(openssl rand -hex 24)"
+          echo "::add-mask::$pass"
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/throwaway.jks" -storetype PKCS12 \
+            -storepass "$pass" -keypass "$pass" -alias throwaway -keyalg RSA -keysize 2048 \
+            -validity 2 -dname "CN=HyperGestures CI throwaway key"
+          {
+            echo "HG_KEYSTORE=$RUNNER_TEMP/throwaway.jks"
+            echo "HG_KEYSTORE_PASSWORD=$pass"
+            echo "HG_KEY_ALIAS=throwaway"
+            echo "HG_KEY_PASSWORD=$pass"
+          } >> "$GITHUB_ENV"
+
       - name: Build, test and package
         env:
           HG_PYTHON: python
-          HG_KEYSTORE_PASSWORD: ${{ secrets.HG_RELEASE_KEYSTORE_PASSWORD }}
-          HG_KEY_ALIAS: ${{ secrets.HG_RELEASE_KEY_ALIAS }}
-          HG_KEY_PASSWORD: ${{ secrets.HG_RELEASE_KEY_PASSWORD }}
-        run: bash tools/build-module.sh
+          # Empty unless this is a release build: no other build is handed the release passwords.
+          REL_KEYSTORE_PASSWORD: >-
+            ${{ env.HG_RELEASE_BUILD == '1' && secrets.HG_RELEASE_KEYSTORE_PASSWORD || '' }}
+          REL_KEY_ALIAS: ${{ env.HG_RELEASE_BUILD == '1' && secrets.HG_RELEASE_KEY_ALIAS || '' }}
+          REL_KEY_PASSWORD: >-
+            ${{ env.HG_RELEASE_BUILD == '1' && secrets.HG_RELEASE_KEY_PASSWORD || '' }}
+        run: |
+          if [ "$HG_RELEASE_BUILD" = 1 ]; then
+            export HG_KEYSTORE_PASSWORD="$REL_KEYSTORE_PASSWORD" HG_KEY_ALIAS="$REL_KEY_ALIAS" \
+              HG_KEY_PASSWORD="$REL_KEY_PASSWORD"
+          fi
+          bash tools/build-module.sh
 
       - name: Remove signing key
         if: always()
-        run: rm -f "$RUNNER_TEMP/release.jks"
+        run: rm -f "$RUNNER_TEMP/release.jks" "$RUNNER_TEMP/throwaway.jks"
 
-      # One plain .zip (the KernelSU module), not a zip of the zip.
-      - uses: actions/upload-artifact@v7
+      # One plain .zip (the KernelSU module), not a zip of the zip; its artifact name is the file
+      # name (archive: false).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: out/HyperGestures-${{ steps.version.outputs.version }}.zip
           archive: false
           if-no-files-found: error
 
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          flags=()
-          case "$VERSION" in *-alpha*|*-beta*|*-rc*) flags+=(--prerelease) ;; esac
-          gh release create "$GITHUB_REF_NAME" "out/HyperGestures-$VERSION.zip" \
-            --repo "$GITHUB_REPOSITORY" --title "HyperGestures $VERSION" \
-            --generate-notes "${flags[@]}"
-
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-reports
           path: "**/build/reports/tests/"
           if-no-files-found: ignore
+
+  # A tag build's release, in a job of its own: the only one with contents: write, and it never
+  # sees the signing key (it takes the signed zip from the build job's artifact).
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      # The whole history, so the tag can be checked against master.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag is on master
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) not on master (release from master only)"
+            exit 1
+          fi
+
+      # The notes are CHANGELOG.md's top section, which must be this version's.
+      - name: Release notes
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          top="$(grep -m 1 '^## ' CHANGELOG.md || true)"
+          if [ "$top" != "## $VERSION" ]; then
+            echo "::error::CHANGELOG.md's top section is '${top:-none}', not '## $VERSION'"
+            exit 1
+          fi
+          awk '/^## / { if (seen) exit; seen = 1; next } seen' CHANGELOG.md \
+            > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md's section for $VERSION is empty"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: HyperGestures-${{ needs.build.outputs.version }}.zip
+          path: dist
+          skip-decompress: true
+
+      # A re-run finds the release already there: it replaces the asset (--clobber) and leaves the
+      # notes as they are.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          zip="$(find dist -type f -name "HyperGestures-$VERSION.zip" | head -n 1)"
+          if [ -z "$zip" ] || ! unzip -l "$zip" module.prop >/dev/null 2>&1; then
+            echo "::error::no module zip HyperGestures-$VERSION.zip in dist: $(find dist -type f)"
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$zip" --repo "$GITHUB_REPOSITORY" --clobber
+            exit 0
+          fi
+          flags=()
+          case "$VERSION" in *-alpha*|*-beta*|*-rc*) flags+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" "$zip" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "HyperGestures $VERSION" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"

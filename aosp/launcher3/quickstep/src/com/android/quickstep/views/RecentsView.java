@@ -2695,10 +2695,13 @@ public abstract class RecentsView<
         int scroll = getPagedOrientationHandler().getPrimaryScroll(this);
         int offPage = getScrollForPage(page) - scroll;
         String front = null;
+        // The settle line (the front card's terms) only with verbose logging: it runs at every
+        // page end, and building it cost a string per card.
+        boolean hgVerbose = com.android.quickstep.HgLog.VERBOSE;
         for (int i = 0, n = getChildCount(); i < n; i++) {
             if (getChildAt(i) instanceof TaskView tv) {
-                String terms = tv.hgSettleStack(menuOpen);
-                if (i == page) {
+                String terms = tv.hgSettleStack(menuOpen, hgVerbose && i == page);
+                if (terms != null) {
                     float left = tv.getLeft() - getScrollX() + tv.getTranslationX()
                             + tv.getPivotX() * (1f - tv.getScaleX());
                     front = terms + " left=" + Math.round(left)
@@ -2706,8 +2709,11 @@ public abstract class RecentsView<
                 }
             }
         }
-        Log.i("HgStack", "settle (" + why + "): page=" + page + " offPage=" + offPage
-                + " width=" + getWidth() + (front != null ? " front: " + front : " no front card"));
+        if (hgVerbose) {
+            Log.i("HgStack", "settle (" + why + "): page=" + page + " offPage=" + offPage
+                    + " width=" + getWidth()
+                    + (front != null ? " front: " + front : " no front card"));
+        }
         if (offPage != 0 && !mHgSettleSnapped) {
             mHgSettleSnapped = true;
             snapToPage(getDestinationPage());

@@ -2,10 +2,10 @@
 // (HgLayoutPickerPreference): HgLayoutPreview's cards, drawn as plain translucent white panes with
 // a header bar above each (owner, 2026-10-31: minimal, "aero white", not colourful) on a dimmed
 // screen. Each pane sits on a solid base in the screen's colour, so a card in front hides the
-// ones behind it (the stack) instead of showing them through. It moves only while attached and shown, and only when the system runs animations
-// (ValueAnimator.areAnimatorsEnabled: off when "Remove animations" is set); otherwise it shows
-// the cycle's first frame; scrolled off the page, the list detaches it and it stops. Its height
-// follows its width (9:16).
+// ones behind it (the stack) instead of showing them through. It moves only while attached and
+// shown, and only when the system runs animations (ValueAnimator.areAnimatorsEnabled: off when
+// "Remove animations" is set); otherwise it shows the cycle's first frame; scrolled off the page,
+// the list detaches it and it stops. Its height follows its width (9:16).
 package com.android.quickstep;
 
 import android.animation.ValueAnimator;
@@ -23,8 +23,6 @@ import androidx.annotation.Nullable;
 
 import com.android.launcher3.R;
 
-import java.util.List;
-
 public final class HgLayoutPreviewView extends View {
     /** The screen's shape, as a phone held upright. */
     private static final float ASPECT = 16f / 9f;
@@ -36,6 +34,8 @@ public final class HgLayoutPreviewView extends View {
     private final Paint mHeader = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
     private final Path mClip = new Path();
+    /** The frame's cards, refilled on every draw (HgLayoutPreview.frame). */
+    private final HgLayoutPreview.Card[] mCards = HgLayoutPreview.newCards();
     private final float mScreenRadius;
     private final float mCardRadius;
     private final int mBaseAlpha;
@@ -134,10 +134,10 @@ public final class HgLayoutPreviewView extends View {
         canvas.save();
         canvas.clipPath(mClip);
         canvas.drawRect(0, 0, w, h, mScreen);
-        List<HgLayoutPreview.Card> cards = HgLayoutPreview.frame(mMode, mT);
+        int count = HgLayoutPreview.frame(mMode, mT, mCards);
         float header = 0.03f * h;
-        for (int i = 0; i < cards.size(); i++) {
-            HgLayoutPreview.Card c = cards.get(i);
+        for (int i = 0; i < count; i++) {
+            HgLayoutPreview.Card c = mCards[i];
             mBase.setAlpha(Math.round(mBaseAlpha * c.alpha));
             mCard.setAlpha(Math.round(mCardAlpha * c.alpha));
             mStroke.setAlpha(Math.round(mStrokeAlpha * c.alpha));

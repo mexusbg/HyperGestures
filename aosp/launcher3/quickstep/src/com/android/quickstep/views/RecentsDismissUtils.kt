@@ -448,16 +448,27 @@ constructor(
                                 activityManagerWrapper.removeAllRecentTasks()
                             }
                         }
-                        removeAllTaskViews()
-                        if (!mUtils.isInDesktopFirstMode()) {
-                            startHome()
-                        }
+                        hgRemoveAllAndGoHome() // HyperGestures: shared with its variants
                         onDismissAnimationEnds()
                         InteractionJankMonitorWrapper.end(Cuj.CUJ_LAUNCHER_OVERVIEW_CLEAR_ALL)
                     }
                 }
             }
             .start()
+    }
+
+    /**
+     * HyperGestures: how a Clear all that ends on the home screen ends (AOSP's dismissAllTasks
+     * end, shared with the locked-cards and return-to-app variants): every card goes, then HOME,
+     * unless in desktop-first mode.
+     */
+    private fun hgRemoveAllAndGoHome() {
+        with(recentsView) {
+            removeAllTaskViews()
+            if (!mUtils.isInDesktopFirstMode()) {
+                startHome()
+            }
+        }
     }
 
     /**
@@ -501,10 +512,7 @@ constructor(
                                 removeTasks.run()
                             }
                         }
-                        removeAllTaskViews()
-                        if (!mUtils.isInDesktopFirstMode()) {
-                            startHome()
-                        }
+                        hgRemoveAllAndGoHome() // HyperGestures: shared with its variants
                         onDismissAnimationEnds()
                         InteractionJankMonitorWrapper.end(Cuj.CUJ_LAUNCHER_OVERVIEW_CLEAR_ALL)
                     }
@@ -577,10 +585,7 @@ constructor(
                     } else {
                         Log.w(TAG, "clear all: cannot return to the running app, going home")
                         finishRecentsAnimation(/* toHome */ true, /* shouldPip */ false) {
-                            removeAllTaskViews()
-                            if (!mUtils.isInDesktopFirstMode()) {
-                                startHome()
-                            }
+                            hgRemoveAllAndGoHome()
                             finish()
                         }
                     }

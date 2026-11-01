@@ -690,12 +690,17 @@ constructor(
         if (!getDeviceProfile().deviceProperties.isLargeScreen) {
             getRowRect(getFirstTaskView(), getLastTaskView(), outTaskViewRowRect)
             // HyperGestures: the app headers sit above the cards (HgTaskHeader); a touch there is
-            // not on empty space, so it must not go home.
+            // not on empty space, so it must not go home. The cards' own header snapshot
+            // (TaskView.hgHasHeader), not the setting read again on every touch.
             if (!outTaskViewRowRect.isEmpty) {
-                val scale = getFirstTaskView()?.scaleY ?: 1f
-                outTaskViewRowRect.top -=
-                    (com.android.quickstep.HgTaskHeader.touchRoom(recentsView.context) * scale)
-                        .toInt()
+                val first = getFirstTaskView()
+                val scale = first?.scaleY ?: 1f
+                val room =
+                    com.android.quickstep.HgTaskHeader.touchRoom(
+                        recentsView.resources,
+                        first?.hgHasHeader == true,
+                    )
+                outTaskViewRowRect.top -= (room * scale).toInt()
             }
             return
         }

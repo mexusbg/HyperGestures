@@ -15,6 +15,7 @@
  */
 package com.android.quickstep;
 
+import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.ImageDecoder;
@@ -43,6 +44,8 @@ public class QuickstepProcessInitializer extends MainProcessInitializer {
 
     @Inject
     public QuickstepProcessInitializer() {
+        // HyperGestures: not in the settings page's ":settings" process (isMainProcess).
+        if (!isMainProcess()) return;
         try {
             // Fake call to create an instance of InteractionJankMonitor to avoid binder calls
             // during its initialization during transitions.
@@ -67,6 +70,12 @@ public class QuickstepProcessInitializer extends MainProcessInitializer {
                     + ", unable to run in a managed profile");
             return;
         }
+
+        // HyperGestures: the settings page and the App info trampoline run in their own
+        // ":settings" process (hg manifest) and use nothing set up below: no FileLog, no
+        // animations or surfaces, no protolog, no image decoding. Only the recents and gesture
+        // provider's main process needs it.
+        if (!isMainProcess()) return;
 
         super.init(context);
 
@@ -108,6 +117,11 @@ public class QuickstepProcessInitializer extends MainProcessInitializer {
         ViewRootImpl.setDebugWrongThreadInit(true);
 
         setupImageDecoder(context);
+    }
+
+    // HyperGestures: the provider's own process, not a ":name" one such as ":settings".
+    private static boolean isMainProcess() {
+        return BuildConfig.APPLICATION_ID.equals(Application.getProcessName());
     }
 
     private void setupImageDecoder(Context context) {

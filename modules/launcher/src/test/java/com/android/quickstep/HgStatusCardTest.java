@@ -10,6 +10,7 @@ import static com.android.quickstep.HgStatusCard.NEUTRAL;
 import static com.android.quickstep.HgStatusCard.OK;
 import static com.android.quickstep.HgStatusCard.PENDING;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
@@ -167,5 +168,30 @@ public class HgStatusCardTest {
     private static void check(HgStatusCard.Row row, int value, int level) {
         assertEquals("value", value, row.value);
         assertEquals("level", level, row.level);
+    }
+    /** Every HyperOS call confirmed and every compiled-in code matches: no row at all. */
+    @Test public void firmware_allGood_noRow() {
+        assertNull(HgStatusCard.firmware(List.of(), List.of()));
+    }
+
+    /** A feature fell back after an OTA: an amber row naming it. */
+    @Test public void firmware_fallback_pendingRowWithDetail() {
+        HgStatusCard.Row row = HgStatusCard.firmware(List.of("HyperOS split screen"), List.of());
+        assertEquals(HgStatusCard.FIRMWARE_FALLBACK, row.value);
+        assertEquals(PENDING, row.level);
+        assertEquals("HyperOS split screen", row.detail);
+    }
+
+    @Test public void firmware_mismatchOnly_row() {
+        HgStatusCard.Row row = HgStatusCard.firmware(List.of(),
+                List.of("IRecentTasks.startRecentsTransition: ours 6, phone 7"));
+        assertEquals(PENDING, row.level);
+        assertEquals("IRecentTasks.startRecentsTransition: ours 6, phone 7", row.detail);
+    }
+
+    @Test public void firmware_bothListed_featuresFirst() {
+        assertEquals("split card on swipe up, IPip.startSwipePipToHome: missing on the phone",
+                HgStatusCard.firmware(List.of("split card on swipe up"),
+                        List.of("IPip.startSwipePipToHome: missing on the phone")).detail);
     }
 }

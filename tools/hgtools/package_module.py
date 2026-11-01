@@ -3,6 +3,7 @@ import argparse
 import os
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -122,14 +123,10 @@ def build_zip(template_dir: Path, apk: Path, overlay_apk: Path, permissions: lis
                              "(stale overlay build output? run ./gradlew :overlay:clean)")
     _check_notif_split(apk, notif_apk)
 
-    allowlists = {}
+    # Entry -> (package, permissions it must grant), checked on the written zip (_check_allowlists).
+    allowlists: dict[str, tuple[str, list[str]]] = {}
     for pkg, perms in ((package, list(permissions)), (notif_package, list(notif_permissions))):
-        xml = privapp.render_xml(pkg, perms)
-        gaps = privapp.missing(xml, perms)
-        if gaps:
-            raise PackagingError(f"privapp allowlist of {pkg} misses {gaps} — would bootloop the "
-                                 "device")
-        allowlists[f"system/etc/permissions/privapp-permissions-{pkg}.xml"] = xml
+        allowlists[f"system/etc/permissions/privapp-permissions-{pkg}.xml"] = (pkg, perms)
 
     files: dict[str, tuple[bytes, bool]] = {}
     for path in sorted(template_dir.rglob("*")):
@@ -142,7 +139,7 @@ def build_zip(template_dir: Path, apk: Path, overlay_apk: Path, permissions: lis
                 raise PackagingError(f"CRLF line endings in {rel}")
         if rel == "module.prop.in":
             rel = "module.prop"
-            data = (data.decode()
+            data = (data.decode("utf-8")
                     .replace("@VERSION@", version)
                     .replace("@VERSION_CODE@", str(version_code))).encode()
         files[rel] = (data, rel in SCRIPTS)
@@ -150,8 +147,8 @@ def build_zip(template_dir: Path, apk: Path, overlay_apk: Path, permissions: lis
     files[APP_ENTRY] = (apk.read_bytes(), False)
     files[NOTIF_ENTRY] = (notif_apk.read_bytes(), False)
     files[OVERLAY_ENTRY] = (overlay_apk.read_bytes(), False)
-    for name, xml in allowlists.items():
-        files[name] = (xml.encode(), False)
+    for name, (pkg, perms) in allowlists.items():
+        files[name] = (privapp.render_xml(pkg, perms).encode("utf-8"), False)
     files["expected-fingerprint"] = ((fingerprint.strip() + "\n").encode(), False)
     for name in LEGAL_FILES:
         legal = ROOT / name
@@ -165,16 +162,36 @@ def build_zip(template_dir: Path, apk: Path, overlay_apk: Path, permissions: lis
         with zipfile.ZipFile(tmp, "w") as z:
             for name, (data, exe) in sorted(files.items()):
                 _entry(z, name, data, exe)
+        _check_allowlists(tmp, allowlists)
         os.replace(tmp, out_zip)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
 
 
+def _check_allowlists(module_zip: Path, allowlists: dict[str, tuple[str, list[str]]]) -> None:
+    """Reads each privapp allowlist back from the written module zip and parses it as the
+    framework does (privapp.allowlisted): every permission the APK requests must be granted to its
+    package there, or system_server throws at boot (ro.control_privapp_permissions=enforce)."""
+    with zipfile.ZipFile(module_zip) as z:
+        for name, (pkg, perms) in allowlists.items():
+            try:
+                xml = z.read(name).decode("utf-8")
+            except KeyError:
+                raise PackagingError(f"{name} is not in the module — would bootloop the device")
+            try:
+                gaps = privapp.missing(xml, pkg, perms)
+            except ET.ParseError as e:
+                raise PackagingError(f"{name} is not valid XML ({e}) — would bootloop the device")
+            if gaps:
+                raise PackagingError(f"privapp allowlist of {pkg} misses {gaps} — would bootloop "
+                                     "the device")
+
+
 def _aapt2_permissions(apk: Path) -> list[str]:
     aapt2 = sdk.find_aapt2(ROOT)
     out = subprocess.run([str(aapt2), "dump", "permissions", str(apk)],
-                         check=True, capture_output=True, text=True).stdout
+                         check=True, capture_output=True, text=True, encoding="utf-8").stdout
     return privapp.parse_permissions(out)
 
 

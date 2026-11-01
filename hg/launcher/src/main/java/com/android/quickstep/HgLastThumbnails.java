@@ -6,8 +6,8 @@
 // 2026-10-09: grey and black cards for the apps that had been in split). TaskThumbnailCache shows
 // the last screenshot taken in split instead when the system has none at any resolution: maybe a
 // little out of date, never blank (not for other tasks: App lock and secure windows withhold
-// snapshots on purpose). Only references to bitmaps the cache already held; bounded like that
-// cache.
+// snapshots on purpose). Only references to bitmaps the cache already held, and only to those
+// taken in split; bounded like that cache.
 package com.android.quickstep;
 
 import androidx.annotation.Nullable;
@@ -29,9 +29,19 @@ public final class HgLastThumbnails<T> {
         };
     }
 
-    /** A screenshot of {@code taskId} recents got; {@code null} (none) leaves the last one. */
-    public synchronized void remember(int taskId, @Nullable T screenshot) {
-        if (screenshot != null) mByTaskId.put(taskId, screenshot);
+    /**
+     * A screenshot of {@code taskId} recents got; {@code null} (none) leaves the last one. Only one
+     * worth falling back to ({@code fallback}: taken in split) is held: any other is the task's
+     * latest screenshot and no fallback, so it just drops the one before, and lastOf answers null
+     * as it would with this one held. No strong reference to every bitmap the cache sees.
+     */
+    public synchronized void remember(int taskId, @Nullable T screenshot, boolean fallback) {
+        if (screenshot == null) return;
+        if (fallback) {
+            mByTaskId.put(taskId, screenshot);
+        } else {
+            mByTaskId.remove(taskId);
+        }
     }
 
     /** The last screenshot of {@code taskId}, or null. */

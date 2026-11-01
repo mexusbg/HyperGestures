@@ -53,6 +53,11 @@ class AospSources {
      * namespace comes from the DSL, and AGP warns about the attribute (it is ignored).
      */
     var manifest: String? = null
+    /**
+     * More XML for `checkPrivateRes` to scan, beyond [res] and [manifest]: e.g. a manifest the
+     * module script puts on build-type source sets itself (`:launcher`'s hg manifest).
+     */
+    var checkedXml: List<String> = emptyList()
 }
 
 /** compileSdk = minSdk = targetSdk: the build targets Android 17 devices only (build map §3.8). */
@@ -135,11 +140,12 @@ private fun Project.aospCompile() {
 }
 
 /**
- * Registers `checkPrivateRes` over the module's res dirs and vendored manifest, wired before
- * `preBuild` (so before resource merging and linking). Up to date while the inputs are unchanged.
+ * Registers `checkPrivateRes` over the module's res dirs, vendored manifest and
+ * [AospSources.checkedXml], wired before `preBuild` (so before resource merging and linking). Up
+ * to date while the inputs are unchanged.
  */
 private fun Project.checkPrivateRes(s: AospSources) {
-    val xmlRoots = (s.res + listOfNotNull(s.manifest)).map { rootProject.file(it) }
+    val xmlRoots = (s.res + listOfNotNull(s.manifest) + s.checkedXml).map { rootProject.file(it) }
     if (xmlRoots.isEmpty()) return
     val repo = rootProject.rootDir
     val allowlist = rootProject.file("tools/hgtools/private-refs-allowlist.txt")

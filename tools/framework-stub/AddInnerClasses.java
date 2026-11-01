@@ -31,6 +31,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -52,6 +53,11 @@ import org.objectweb.asm.Opcodes;
 
 public class AddInnerClasses {
     static final String MARKER = "META-INF/hg-innerclasses";
+    /**
+     * Every entry's timestamp (make-framework-stub.sh's Python step uses the same). Not 1980-01-01
+     * 00:00: ZipEntry takes that DOS value as "before 1980" and adds a zone-dependent timestamp.
+     */
+    private static final LocalDateTime FIXED_TIME = LocalDateTime.of(1980, 2, 1, 0, 0);
 
     record Nesting(String name, String outer, String inner, int access) {}
 
@@ -136,11 +142,11 @@ public class AddInnerClasses {
             try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(tmp))) {
                 for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
                     if (entry.getKey().equals(MARKER)) continue; // rewritten below, not copied twice
-                    out.putNextEntry(new ZipEntry(entry.getKey()));
+                    out.putNextEntry(fixedTimeEntry(entry.getKey()));
                     out.write(entry.getValue());
                     out.closeEntry();
                 }
-                out.putNextEntry(new ZipEntry(MARKER));
+                out.putNextEntry(fixedTimeEntry(MARKER));
                 out.write(marker.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 out.closeEntry();
             }
@@ -151,6 +157,16 @@ public class AddInnerClasses {
         }
         System.out.println("InnerClasses completed: " + addedEntries + " entries added to "
                 + changedClasses + " classes");
+    }
+
+    /**
+     * A jar entry with a fixed timestamp (a local DOS time: no time zone, no extra field), so the
+     * same input jar always yields the same stub bytes.
+     */
+    private static ZipEntry fixedTimeEntry(String name) {
+        ZipEntry e = new ZipEntry(name);
+        e.setTimeLocal(FIXED_TIME);
+        return e;
     }
 
     /** Internal names referenced by class constants and by descriptors/signatures in UTF8s. */

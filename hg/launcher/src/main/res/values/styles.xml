@@ -32,13 +32,7 @@
         <item name="colorOutlineVariant">@color/hg_settings_outline</item>
         <item name="android:windowLightStatusBar">@bool/hg_settings_light_bars</item>
         <item name="android:windowLightNavigationBar">@bool/hg_settings_light_bars</item>
-        <item name="alertDialogTheme">@style/HgSettingsDialog</item>
         <item name="preferenceTheme">@style/HgPreferenceTheme</item>
-    </style>
-
-    <!-- The settings page's dialogs (a list's choices): a rounded card in the page's colours. -->
-    <style name="HgSettingsDialog" parent="ThemeOverlay.Material3.Dialog.Alert">
-        <item name="android:windowBackground">@drawable/hg_settings_dialog_bg</item>
     </style>
 
     <!-- The settings page's large title in the accent colour (as HyperOS's About phone shows its

@@ -30,11 +30,25 @@ echo "== firmware"
 echo "expected: $(hg_expected_fingerprint "$MODDIR")"
 echo "phone:    $(hg_phone_fingerprint)"
 hg_firmware_status "$MODDIR"
+# post-fs-data's per-boot records (mount-mode, mount-status, the marker dormant) belong to this
+# boot only when mount-mode names this boot's id (its third line). Otherwise they are an earlier
+# boot's (post-fs-data did not run: the module was disabled or removed at boot, or KernelSU's
+# safe mode) and are not shown as this boot's. A record without the id (an older module) counts
+# while the module is enabled.
+hg_rec_boot="$(sed -n 3p "$HG_DATA/mount-mode" 2>/dev/null)"
+hg_off=""; { [ -f "$MODDIR/disable" ] || [ -f "$MODDIR/remove" ]; } && hg_off=1
+if [ -n "$hg_rec_boot" ]; then
+  hg_fresh=0; [ "$hg_rec_boot" = "$(hg_boot_id)" ] && hg_fresh=1
+elif [ -n "$hg_off" ]; then hg_fresh=0
+else hg_fresh=1; fi
+hg_stale="no record this boot (post-fs-data did not run: module disabled or removed, or safe mode)"
 echo "== home"
 # HOME now (roles.xml, else cmd role) against this boot (post-fs-data's marker dormant).
 hg_home_state live
-if [ -f "$HG_DATA/dormant" ]; then hg_boot=dormant; else hg_boot=active; fi
+if [ "$hg_fresh" = 0 ]; then hg_boot=stale
+elif [ -f "$HG_DATA/dormant" ]; then hg_boot=dormant; else hg_boot=active; fi
 case "$HG_HOME_STATE/$hg_boot" in
+  */stale) echo "home: ${HG_HOME:-unknown}; this boot: $hg_stale" ;;
   dormant/dormant) echo "home: $HG_HOME → dormant (reboot after choosing another launcher)" ;;
   dormant/active) echo "home: $HG_HOME → dormant from the next boot (this boot is active: reboot to hand gestures back to MiuiHome)" ;;
   active/active) echo "home: $HG_HOME → active" ;;
@@ -43,13 +57,27 @@ case "$HG_HOME_STATE/$hg_boot" in
 esac
 [ -n "$HG_HOME_SRC" ] && echo "home from: $HG_HOME_SRC"
 echo "== mount"
-# mount-mode (post-fs-data, this boot): "REQ MODE ID VC" then the description.
-hg_mode_now="$(sed -n 2p "$HG_DATA/mount-mode" 2>/dev/null)"
-echo "mount mode: ${hg_mode_now:-no record this boot (post-fs-data never ran, or the boot-loop protection tripped)}"
-hg_mount_resolve "$MODDIR" "${MOUNT:-}"
-[ "$HG_MOUNT_DESC" = "$hg_mode_now" ] || echo "next boot: $HG_MOUNT_DESC"
+# mount-mode (post-fs-data, this boot): "REQ MODE ID VC", the description, the boot id.
+if [ "$hg_fresh" = 1 ]; then
+  hg_mode_now="$(sed -n 2p "$HG_DATA/mount-mode" 2>/dev/null)"
+  hg_nr="no record this boot (post-fs-data never ran, or the boot-loop protection tripped)"
+  echo "mount mode: ${hg_mode_now:-$hg_nr}"
+else
+  hg_mode_now=""; echo "mount mode: $hg_stale"
+fi
+if [ -n "$hg_off" ]; then
+  echo "next boot: nothing mounted (module disabled or marked for removal)"
+else
+  hg_mount_resolve "$MODDIR" "${MOUNT:-}"
+  [ "$HG_MOUNT_DESC" = "$hg_mode_now" ] || echo "next boot: $HG_MOUNT_DESC"
+fi
 [ -f "$HG_DATA/metamodule-missed" ] && echo "metamodule-missed: $(cat "$HG_DATA/metamodule-missed") (did not mount the app; auto uses self until it changes or setconf.sh MOUNT auto)"
-echo "mount: $(cat "$HG_DATA/mount-status" 2>/dev/null || echo "no record (post-fs-data never ran?)")"
+if [ "$hg_fresh" = 1 ]; then
+  echo "mount: $(cat "$HG_DATA/mount-status" 2>/dev/null ||
+    echo "no record (post-fs-data never ran?)")"
+else
+  echo "mount: $hg_stale"
+fi
 hg_apk=missing; [ -e "$HG_ROOT/system/priv-app/HyperGestures" ] && hg_apk=yes
 hg_ovl=missing; [ -f "$HG_ROOT/product/overlay/$HG_OVERLAY_APK" ] && hg_ovl=yes
 if [ "$hg_apk$hg_ovl" = yesyes ]; then

@@ -27,7 +27,7 @@ if [ -f "$MODPATH/common/functions.sh" ]; then
     1) ;; # module.prop names no version: nothing to note
     *) ui_print "! the app's About page can't name this update (see the log) until the reboot" ;;
   esac
-  hg_mount_resolve "$MODPATH" "$(hg_config_get MOUNT)"
+  hg_mount_resolve "$MODPATH" "$(hg_config_mount)" # MOUNT as post-fs-data will read it
   if [ "$HG_MOUNT_MODE" = self ]; then
     if hg_sync_skip_mount "$MODPATH" self; then
       ui_print "- mount: $HG_MOUNT_DESC; skip_mount set, so no metamodule mounts the module's files too"

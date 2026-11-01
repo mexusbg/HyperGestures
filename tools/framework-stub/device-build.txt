@@ -4,6 +4,6 @@
 # The build refuses a stub with another fingerprint; the KernelSU module packages it as
 # expected-fingerprint and sets up only on a phone whose ro.build.fingerprint matches
 # (IGNORE_FINGERPRINT=1 in its config overrides).
-fingerprint=Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.11.XPAEUXM:user/release-keys
-framework.jar.sha256=41092430f70ee0a13cc81e9b4d4c2e36199d1c73f1813499a2c9c5ef418d101f
-framework-res.apk.sha256=ba9921e80443710f8b7a208987153172662c685c8ac1f2363d6cbde1f9ae54bb
+fingerprint=Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.13.XPAEUXM:user/release-keys
+framework.jar.sha256=2db0b2fda31ba272088855b5d7d214a270a0bc33d1fedea122568588f6cf8848
+framework-res.apk.sha256=69a814a1813978e8911deb9903503b3ee2df86a66c0cb3e4afe184ecd2735669

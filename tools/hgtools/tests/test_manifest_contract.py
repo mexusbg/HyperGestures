@@ -190,6 +190,40 @@ class ManifestContractTest(unittest.TestCase):
         problems = m.check_root(m.parse_xmltree(LISTENER_XMLTREE))
         self.assertTrue(any("NotificationListener" in p for p in problems), problems)
 
+    def test_customization_provider_is_reported(self):
+        name = "com.android.launcher3.graphics.LauncherCustomizationProvider"
+        problems = m.check(_manifest(RECENTS_ACTIVITY + QUICKSTEP_SERVICE
+                                     + _component("provider", name)))
+        self.assertTrue(any(name in p for p in problems), problems)
+
+
+PATHS_NS = 'xmlns:android="http://schemas.android.com/apk/res/android"'
+
+
+def _paths(inner: str) -> str:
+    return f"<paths {PATHS_NS}>{inner}</paths>"
+
+
+class FileProviderPathsTest(unittest.TestCase):
+    def test_one_subdirectory_is_clean(self):
+        xml = _paths('<!-- why --><cache-path name="shared_images" path="Overview/" />')
+        self.assertEqual(m.check_file_provider_paths(xml), [])
+
+    def test_root_path_is_reported(self):
+        problems = m.check_file_provider_paths(_paths('<root-path name="apps" path="Overview/" />'))
+        self.assertTrue(any("root-path" in p for p in problems), problems)
+
+    def test_whole_directories_are_reported(self):
+        for path in ("/", "", ".", "./"):
+            with self.subTest(path=path):
+                xml = _paths(f'<files-path name="f" path="{path}" />')
+                self.assertTrue(m.check_file_provider_paths(xml))
+        self.assertTrue(m.check_file_provider_paths(_paths('<cache-path name="c" />')))
+
+    def test_vendored_recents_paths_are_clean(self):
+        paths = m.ROOT / "aosp/launcher3/quickstep/res/xml/overview_file_provider_paths.xml"
+        self.assertEqual(m.check_file_provider_paths(paths.read_text(encoding="utf-8")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,6 +37,7 @@ final class HgToastOverlay {
 
     private static final Handler sMain = new Handler(Looper.getMainLooper());
     private static final Runnable sHide = HgToastOverlay::hide;
+    /** The message window's view, set once addView succeeded (added, attached or not yet). */
     @Nullable private static View sShown;
 
     /** Shows {@code text} for SHOW_MS, replacing a message still on screen. */
@@ -91,7 +92,9 @@ final class HgToastOverlay {
         sMain.removeCallbacks(sHide);
         View view = sShown;
         sShown = null;
-        if (view == null || !view.isAttachedToWindow()) return;
+        // Not isAttachedToWindow(): a view added but not yet traversed is not attached yet, and
+        // skipping it would leave its window on screen for good.
+        if (view == null) return;
         try {
             WindowManager wm = view.getContext().getSystemService(WindowManager.class);
             if (wm != null) wm.removeView(view);

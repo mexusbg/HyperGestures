@@ -63,18 +63,22 @@ final class EdgeBackInputConsumer implements InputConsumer,
         }
     }
 
+    /** Every other outcome (cancelled, not started): nothing to send. */
     @Override
-    public void onBackGestureAttempted(EdgeBackGestureHandler.BackGestureResult result) {
-        if (mFailed) return;
+    public void onBackGestureAttempted(EdgeBackGestureHandler.BackGestureResult result) {}
+
+    /**
+     * A completed back gesture: sends BACK. @return whether it was sent, so the arrow plays its
+     * commit tick and animation only for a back that happened (else it leaves as a cancel).
+     */
+    @Override
+    public boolean hgOnBackCompleted(EdgeBackGestureHandler.BackGestureResult result) {
+        if (mFailed) return false;
         try {
-            boolean completed =
-                    result == EdgeBackGestureHandler.BackGestureResult.BACK_COMPLETED_FROM_LEFT
-                    || result == EdgeBackGestureHandler.BackGestureResult.BACK_COMPLETED_FROM_RIGHT;
-            if (!completed) return;
             if (!HgBackPolicy.canCommit(mTaskAnimationManager.isRecentsAnimationRunning(),
                     SystemClock.uptimeMillis(), mTaskAnimationManager.getRecentsCleanedUpAtMs())) {
                 Log.w(TAG, "back not sent: recents animation running or just finished");
-                return;
+                return false;
             }
             HgBackPolicy.BackPath path = HgBackPolicy.backPath(
                     Settings.Global.getString(mContext.getContentResolver(), BACK_PATH_SETTING));
@@ -96,8 +100,10 @@ final class EdgeBackInputConsumer implements InputConsumer,
                     break;
             }
             Log.d(TAG, "back sent " + result + " via " + path);
+            return true;
         } catch (RuntimeException e) {
             fail("back commit failed", e);
+            return false;
         }
     }
 

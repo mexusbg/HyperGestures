@@ -1,0 +1,17 @@
+  Class descriptor  : 'Lcom/android/wm/shell/sosc/ISoScSplitScreen$Stub$Proxy;'
+  Virtual methods   -
+    #0              : (in Lcom/android/wm/shell/sosc/ISoScSplitScreen$Stub$Proxy;)
+      name          : 'startTask'
+      type          : '(IILandroid/os/Bundle;)V'
+      insns size    : 40 16-bit code units
+000100:                                        |[000100] x.startTask:(IILandroid/os/Bundle;)V
+000110: 6e20 0000 1000                         |0003: invoke-virtual {v0, v1}, Landroid/os/Parcel;.writeInterfaceToken:(Ljava/lang/String;)V // method@0000
+000116: 6e20 0100 2000                         |0006: invoke-virtual {v0, v2}, Landroid/os/Parcel;.writeInt:(I)V // method@0001
+00011c: 6e20 0100 3000                         |0009: invoke-virtual {v0, v3}, Landroid/os/Parcel;.writeInt:(I)V // method@0001
+000122: 6e30 0200 4005                         |000c: invoke-virtual {v0, v4, v5}, Landroid/os/Parcel;.writeTypedObject:(Landroid/os/Parcelable;I)V // method@0002
+  Class descriptor  : 'Lcom/example/Unrelated$Stub$Proxy;'
+  Virtual methods   -
+    #0              : (in Lcom/example/Unrelated$Stub$Proxy;)
+      name          : 'foo'
+      type          : '()V'
+000200: 6e20 0100 2000                         |0006: invoke-virtual {v0, v2}, Landroid/os/Parcel;.writeInt:(I)V // method@0001
