@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.2-beta
+
+Install in KernelSU, then reboot fully. Tested on HyperOS 4.0.1.0 stable.
+
+- **Split screen cards:** an app in split screen, or one that just left it, no longer shows a
+  stretched or half preview in recents. HyperOS only has a half-screen picture of it until it is
+  open full screen again, so its card shows the app's icon on its colour until then.
+- **Home over recents:** after you remove one app from a split, opening recents no longer shows
+  your home screen on top of the cards.
+- **One app left in split:** recents opens fully right away; opening that app from recents ends
+  the split and shows it full screen.
+
 ## 0.4.1-beta
 
 Install in KernelSU, then reboot fully.
