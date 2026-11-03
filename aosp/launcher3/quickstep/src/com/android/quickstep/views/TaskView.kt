@@ -1113,6 +1113,19 @@ constructor(
                 splitBounds = (this as? GroupedTaskView)?.splitBoundsConfig,
                 stagePosition = container.stagePosition,
             )
+        // HyperGestures: an app in, or just out of, HyperOS's split has only a half-screen
+        // snapshot; its card shows the icon card (HgSplitPreview)
+        val thumbnail = container.thumbnailData?.thumbnail
+        container.hgIconCard =
+            thumbnail != null &&
+                com.android.quickstep.HgSplitPreview.iconCard(
+                    container.thumbnailData?.windowingMode ?: 0,
+                    container.stagePosition == STAGE_POSITION_UNDEFINED,
+                    thumbnail.width.toFloat(),
+                    thumbnail.height.toFloat(),
+                    container.snapshotView.width,
+                    container.snapshotView.height,
+                )
         applyThumbnailSplashAlpha()
     }
 
@@ -1255,6 +1268,7 @@ constructor(
     private fun getSplashAlphaProgress(): Float =
         when {
             splitSplashAlpha > 0f -> splitSplashAlpha
+            taskContainers.any { it.hgIconCard } -> 1f // HyperGestures: HgSplitPreview
             shouldShowSplash() -> taskThumbnailSplashAlpha
             else -> 0f
         }

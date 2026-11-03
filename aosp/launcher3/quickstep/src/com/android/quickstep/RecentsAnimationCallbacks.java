@@ -156,6 +156,9 @@ public class RecentsAnimationCallbacks implements
             } catch (RuntimeException e) {
                 android.util.Log.w("HgSplit", "no split bounds for the gesture", e);
             }
+            // HyperGestures: home closing along with an app (HyperOS's split with one app left)
+            // stays drawn over recents unless hidden
+            mController.hgSetHiddenHomes(HgHomeUnderRecents.hide(appTargets));
             final RecentsAnimationTargets targets = new RecentsAnimationTargets(appTargets,
                     wallpaperTargets, nonAppTargets, homeContentInsets, extras);
 
@@ -171,6 +174,7 @@ public class RecentsAnimationCallbacks implements
     @BinderThread
     @Override
     public final void onAnimationCanceled(HashMap<Integer, ThumbnailData> thumbnailDatas) {
+        if (mController != null) mController.hgRestoreHiddenHomes(); // HyperGestures
         Utilities.postAsyncCallback(MAIN_EXECUTOR.getHandler(), () -> {
             ActiveGestureProtoLogProxy.logRecentsAnimationCallbacksOnAnimationCancelled();
             for (RecentsAnimationListener listener : getListeners()) {

@@ -7,8 +7,9 @@ launcher. Set Nova (or any other launcher) as home and HyperOS takes the gesture
 you a broken recents screen. HyperGestures fixes that: your launcher stays home, and swipe up,
 quick switch, recents and back work and look like stock HyperOS.
 
-> **Beta.** Tested on the **Xiaomi 17 Ultra** with **HyperOS 4.0, EEA (Europe) firmware**. It
-> may work on other HyperOS 4 phones and firmware too. If it doesn't, please
+> **Beta.** Tested on the **Xiaomi 17 Ultra** with **HyperOS 4.0.1.0 stable, EEA (Europe)
+> firmware**, and the 4.0.0.11 and 4.0.0.13 betas before it. It may work on other HyperOS 4
+> phones and firmware too. If it doesn't, please
 > [open an issue](../../issues) and attach your logs (see
 > [Something not working?](#something-not-working)). It needs root and changes how SystemUI
 > runs: read [Safety and recovery](#safety-and-recovery) before installing.
@@ -67,10 +68,10 @@ The settings page:
 
 ## Requirements
 
-- **Phone:** tested on the Xiaomi 17 Ultra (`nezha`), HyperOS 4.0 EEA firmware (Android 17).
-  Other HyperOS 4 phones and firmware may work: on firmware it wasn't built for, the module
-  still sets up and tells you so, and if gestures don't come up at boot it rolls back to stock
-  on its own.
+- **Phone:** tested on the Xiaomi 17 Ultra (`nezha`), HyperOS 4.0.1.0 stable EEA firmware
+  (Android 17), and the 4.0.0.11 and 4.0.0.13 betas. Other HyperOS 4 phones and firmware may
+  work: the app reads HyperOS's split-screen interfaces from the phone itself, the module sets
+  up on any build, and if gestures don't come up at boot it rolls back to stock on its own.
 - **Root:** KernelSU, with a module mount (a metamodule such as Hybrid Mount works).
 - **Home:** a third-party launcher set as the default home app.
 - **Optional:** LSPosed, for the notification icon fix.
@@ -119,7 +120,7 @@ changelog. Install it and reboot. You can also install a newer zip over the old 
 Please [open an issue](../../issues) with:
 
 1. your phone model and HyperOS version (Settings, About phone, OS version, for example
-   `4.0.0.13.XPAEUXM`);
+   `4.0.1.0.XPAEUXM`);
 2. the HyperGestures version (Settings, About);
 3. what you did, what you expected and what happened;
 4. **the logs:** in HyperGestures' settings, under Logs, tap **Save logs**. A zip appears in
@@ -144,9 +145,12 @@ If the screen has no working navigation, use adb: run `restore.sh` as above, or 
 module with `adb shell su -c touch /data/adb/modules/hypergestures/disable` and reboot. KernelSU
 safe mode also boots without the module.
 
-Before a firmware update (OTA), the safest route is to run `restore.sh` and disable the module,
-update, then install a HyperGestures build for the new firmware. Small OTAs often keep working,
-but Xiaomi may change SystemUI internals HyperGestures depends on.
+HyperGestures keeps working across firmware updates (OTAs): it reads HyperOS's split-screen
+interfaces from the phone at startup, so the update from the 4.0.0.13 beta to 4.0.1.0 stable
+needed no new build. If an update changes something it can't follow, only that feature falls
+back to the stock behaviour and the status card shows a **Firmware compatibility** row saying
+which. If an update breaks gestures entirely, the boot check above rolls back to stock on its
+own; [open an issue](../../issues) with your logs.
 
 ## Building from source
 

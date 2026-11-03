@@ -2769,7 +2769,31 @@ public abstract class AbsSwipeUpHandler<
             SystemUiProxy.INSTANCE.get(mContext).onOverviewShown(false, TAG);
         }
         doLogGesture(RECENTS, mRecentsView.getCurrentPageTaskView());
+        hgEndLiveTileOfMinimizedSplit();
         reset();
+    }
+
+    /**
+     * HyperGestures: the app left alone in HyperOS's split (HgSplitPreview.minimizedSplit) shows
+     * its half-screen window as the live tile; its card switches to a snapshot (the icon card) and
+     * recents ends the animation on top, so home goes back under recents.
+     */
+    private void hgEndLiveTileOfMinimizedSplit() {
+        RemoteAnimationTarget running = mRecentsAnimationTargets != null
+                ? mRecentsAnimationTargets.findTask(mGestureState.getTopRunningTaskId())
+                : null;
+        if (running == null || running.screenSpaceBounds == null) return;
+        Rect b = running.screenSpaceBounds;
+        DeviceProfile dp = mContainer.getDeviceProfile();
+        if (!HgSplitPreview.minimizedSplit(running.windowConfiguration.getWindowingMode(),
+                b.left, b.top, b.right, b.bottom, dp.getDeviceProperties().getWidthPx(),
+                dp.getDeviceProperties().getHeightPx())) {
+            return;
+        }
+        Log.d(TAG, "task " + running.taskId + " is in HyperOS's minimized split: no live tile");
+        final RECENTS_VIEW recentsView = mRecentsView;
+        recentsView.switchToScreenshot(
+                () -> recentsView.finishRecentsAnimation(true /* toHome */, null));
     }
 
     private static boolean isNotInRecents(RemoteAnimationTarget app) {

@@ -59,11 +59,29 @@ public class RecentsAnimationController {
     // Only valid when mFinishRequested == true.
     private boolean mFinishTargetIsLauncher;
     private RunnableList mPendingFinishCallbacks = new RunnableList();
+    // HyperGestures: home surfaces hidden under recents (HgHomeUnderRecents), shown again once
+    // the system has finished the animation
+    private java.util.List<android.view.SurfaceControl> mHgHiddenHomes = java.util.List.of();
 
     public RecentsAnimationController(RecentsAnimationControllerCompat controller,
             Consumer<RecentsAnimationController> onFinishedListener) {
         mController = controller;
         mOnFinishedListener = onFinishedListener;
+    }
+
+    /** HyperGestures: the home surfaces HgHomeUnderRecents hid for this animation. */
+    public synchronized void hgSetHiddenHomes(java.util.List<android.view.SurfaceControl> homes) {
+        mHgHiddenHomes = homes;
+    }
+
+    /** HyperGestures: shows the hidden home surfaces again, once. */
+    public void hgRestoreHiddenHomes() {
+        java.util.List<android.view.SurfaceControl> homes;
+        synchronized (this) {
+            homes = mHgHiddenHomes;
+            mHgHiddenHomes = java.util.List.of();
+        }
+        HgHomeUnderRecents.restore(homes);
     }
 
     /**
@@ -161,6 +179,7 @@ public class RecentsAnimationController {
                 @Override
                 public void send(int i, Bundle bundle) throws RemoteException {
                     ActiveGestureProtoLogProxy.logFinishRecentsAnimationCallback();
+                    hgRestoreHiddenHomes(); // HyperGestures
                     MAIN_EXECUTOR.execute(mPendingFinishCallbacks::executeAllAndDestroy);
                 }
             });

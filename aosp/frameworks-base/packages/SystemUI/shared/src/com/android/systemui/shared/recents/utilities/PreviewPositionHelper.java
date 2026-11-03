@@ -2,6 +2,7 @@ package com.android.systemui.shared.recents.utilities;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.view.Surface.ROTATION_180;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
@@ -73,9 +74,12 @@ public class PreviewPositionHelper {
         // HyperGestures: a floating window (HyperOS freeform) is smaller than the screen; filling
         // the card with it drew its content about 1.4x larger than every other card (owner,
         // 2026-10-07: "taken from a very low DPI version"). It is drawn at the scale of a
-        // full-screen card instead, centred.
-        if (thumbnailData.windowingMode == WINDOWING_MODE_FREEFORM && canvasWidth > 0
-                && canvasHeight > 0 && thumbnailData.scale > 0) {
+        // full-screen card instead, centred. So is an app that left split screen: HyperOS keeps
+        // its half-screen snapshot (hgDrawsAtScreenScale).
+        if (thumbnailData.scale > 0 && hgDrawsAtScreenScale(thumbnailData.getThumbnail() != null,
+                thumbnailData.windowingMode, mSplitPosition, getRotationDelta(currentRotation, thumbnailData.rotation),
+                thumbnailBounds.width() / thumbnailData.scale,
+                thumbnailBounds.height() / thumbnailData.scale, canvasWidth, canvasHeight)) {
             int w = Resources.getSystem().getDisplayMetrics().widthPixels;
             int h = Resources.getSystem().getDisplayMetrics().heightPixels;
             float displayWidth = canvasWidth <= canvasHeight ? Math.min(w, h) : Math.max(w, h);
@@ -230,6 +234,31 @@ public class PreviewPositionHelper {
 
         mMatrix.postScale(thumbnailScale, thumbnailScale);
         mIsOrientationChanged = isOrientationDifferent;
+    }
+
+    /**
+     * HyperGestures: whether a card draws its snapshot at a full-screen card's scale
+     * (hgFreeformFit) instead of filling the card: a floating window, or, on a single-task card,
+     * a snapshot far from the card's shape with no rotation to explain it. An app that left split
+     * screen keeps the half-screen snapshot it had there, recorded as full-screen; filled, its
+     * content showed about 2x larger than every other card (owner, 2026-11-03). Not the running
+     * app's window ({@code snapshot} false: TaskViewSimulator) nor a snapshot taken in split: an
+     * app still in split fills its card as its live tile does, else the card showed home through
+     * it.
+     */
+    public static boolean hgDrawsAtScreenScale(boolean snapshot, int windowingMode,
+            int splitPosition, int deltaRotate, float surfaceWidth, float surfaceHeight,
+            int canvasWidth, int canvasHeight) {
+        if (canvasWidth <= 0 || canvasHeight <= 0 || surfaceWidth <= 0 || surfaceHeight <= 0) {
+            return false;
+        }
+        if (windowingMode == WINDOWING_MODE_FREEFORM) return true;
+        if (!snapshot || windowingMode == WINDOWING_MODE_MULTI_WINDOW
+                || splitPosition != SPLIT_POSITION_UNDEFINED || deltaRotate != 0) {
+            return false;
+        }
+        return Utilities.isRelativePercentDifferenceGreaterThan(canvasWidth / (float) canvasHeight,
+                surfaceWidth / surfaceHeight, MAX_PCT_BEFORE_ASPECT_RATIOS_CONSIDERED_DIFFERENT);
     }
 
     /**

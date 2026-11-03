@@ -71,6 +71,10 @@ class TaskContainer(
     var isThumbnailValid: Boolean = false
         internal set
 
+    /** HyperGestures: the card shows the app's icon on its colour (HgSplitPreview). */
+    var hgIconCard: Boolean = false
+        internal set
+
     val shouldShowSplashView: Boolean
         get() = taskView.shouldShowSplash()
 
@@ -97,6 +101,7 @@ class TaskContainer(
             taskContentView.scaleY = 1f
             overlay.reset()
             isThumbnailValid = false
+            hgIconCard = false
             thumbnailData = null
             snapshotView.onRecycle()
         }

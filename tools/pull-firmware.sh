@@ -18,6 +18,8 @@ version="$("${ADB[@]}" shell getprop ro.build.version.incremental | tr -d '\r')"
 version="${version%.*}" # OS4.0.0.13.XPAEUXM -> OS4.0.0.13
 DEST="${1:-$ROOT/prebuilts/device/firmware-$version}"
 mkdir -p "$DEST"
+# Git Bash: the conversion is off (above), so hand adb.exe a Windows path for the local side
+command -v cygpath >/dev/null && DEST="$(cygpath -m "$DEST")"
 
 for f in /system_ext/framework/Miui-WindowManager-Shell.jar \
          /system_ext/priv-app/MiuiSystemUI/MiuiSystemUI.apk \

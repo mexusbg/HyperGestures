@@ -133,7 +133,9 @@ constructor(
         val multiWindow = android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW
         if (last.windowingMode != multiWindow || key.windowingMode == multiWindow) return data
         Log.d(TAG, "task ${key.id} left a split: no system snapshot, showing the last one")
-        return last
+        // Marked full-screen, as HyperOS marks its own: the card draws it at screen scale
+        // (PreviewPositionHelper.hgDrawsAtScreenScale), not filled as a task still in split
+        return last.copy(windowingMode = android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN)
     }
 
     /** HyperGestures: the system's snapshot of a task at whichever resolution it holds. */
