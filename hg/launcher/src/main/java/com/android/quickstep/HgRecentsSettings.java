@@ -20,6 +20,12 @@ public final class HgRecentsSettings {
      * cannot blur (HgBlurSupport). Read when RecentsActivity is created.
      */
     public static final String BLUR_FALLBACK = "hypergestures_blur_fallback";
+    /**
+     * A card with only a half-screen snapshot of an app in, or just out of, HyperOS's split shows
+     * the app's last full-screen screenshot from before (HgPreSplitThumbnails). Off ("0"): the
+     * icon card (HgSplitPreview). Read as each card updates.
+     */
+    public static final String PRE_SPLIT_PREVIEW = "hypergestures_pre_split_preview";
     /** Swipe a card down to lock or unlock it (HgTaskLockSwipeController). Read per touch. */
     public static final String CARD_LOCK_SWIPE = "hypergestures_card_lock_swipe";
     /** Hold a card for the round action buttons (HgTaskActionsView). */

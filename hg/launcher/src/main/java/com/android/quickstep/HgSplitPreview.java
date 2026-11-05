@@ -36,6 +36,46 @@ public final class HgSplitPreview {
     }
 
     /**
+     * Whether a screenshot ({@code thumbWidth} x {@code thumbHeight}, any resolution) shows the app
+     * full screen: the {@code displayWidth} x {@code displayHeight} screen's shape, either way up;
+     * not taken in split or as a floating window. HgPreSplitThumbnails keeps those.
+     */
+    public static boolean fullScreenShape(int windowingMode, float thumbWidth, float thumbHeight,
+            int displayWidth, int displayHeight) {
+        if (windowingMode == WINDOWING_MODE_MULTI_WINDOW
+                || windowingMode == WINDOWING_MODE_FREEFORM) {
+            return false;
+        }
+        if (thumbWidth <= 0 || thumbHeight <= 0 || displayWidth <= 0 || displayHeight <= 0) {
+            return false;
+        }
+        float thumb = Math.min(thumbWidth, thumbHeight) / Math.max(thumbWidth, thumbHeight);
+        float display = Math.min(displayWidth, displayHeight)
+                / (float) Math.max(displayWidth, displayHeight);
+        return !Utilities.isRelativePercentDifferenceGreaterThan(display, thumb,
+                PreviewPositionHelper.MAX_PCT_BEFORE_ASPECT_RATIOS_CONSIDERED_DIFFERENT);
+    }
+
+    /**
+     * Whether an icon card (see iconCard; same arguments) shows the app's last full-screen
+     * screenshot ({@code preWidth} x {@code preHeight}; 0 if none) instead: the option is on
+     * ({@code on}), the app is not locked by App lock ({@code appLocked}), and that screenshot
+     * fits the card (the card's orientation and shape).
+     */
+    public static boolean showsPreSplit(boolean on, boolean appLocked, int windowingMode,
+            boolean singleCard, float thumbWidth, float thumbHeight, float preWidth,
+            float preHeight, int cardWidth, int cardHeight) {
+        if (!on || appLocked || preWidth <= 0 || preHeight <= 0) return false;
+        if (!iconCard(windowingMode, singleCard, thumbWidth, thumbHeight, cardWidth, cardHeight)) {
+            return false;
+        }
+        if ((preWidth > preHeight) != (cardWidth > cardHeight)) return false;
+        return !Utilities.isRelativePercentDifferenceGreaterThan(cardWidth / (float) cardHeight,
+                preWidth / preHeight,
+                PreviewPositionHelper.MAX_PCT_BEFORE_ASPECT_RATIOS_CONSIDERED_DIFFERENT);
+    }
+
+    /**
      * Whether the running app is in HyperOS's minimized split: in split, its window pushed partly
      * off the {@code displayWidth} x {@code displayHeight} screen.
      */

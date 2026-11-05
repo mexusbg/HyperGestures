@@ -76,4 +76,94 @@ public class HgSplitPreviewTest {
     public void fullScreenApp_notMinimized() {
         assertFalse(HgSplitPreview.minimizedSplit(FULLSCREEN, 0, 0, 1200, 2608, 1200, 2608));
     }
+
+    // fullScreenShape: which screenshots are kept to show after a split (HgPreSplitThumbnails)
+
+    @Test
+    public void fullScreenSnapshot_fullScreenShape() {
+        assertTrue(HgSplitPreview.fullScreenShape(FULLSCREEN, 1200f, 2608f, 1200, 2608));
+    }
+
+    @Test
+    public void reducedSnapshot_fullScreenShape() {
+        assertTrue(HgSplitPreview.fullScreenShape(FULLSCREEN, 600f, 1304f, 1200, 2608));
+    }
+
+    /** A landscape app's screenshot: the screen's shape turned. */
+    @Test
+    public void landscapeSnapshot_fullScreenShape() {
+        assertTrue(HgSplitPreview.fullScreenShape(FULLSCREEN, 2608f, 1200f, 1200, 2608));
+    }
+
+    /** Slack after leaving split: recorded full-screen, but half the screen. */
+    @Test
+    public void halfScreenSnapshot_notFullScreenShape() {
+        assertFalse(HgSplitPreview.fullScreenShape(FULLSCREEN, 1200f, 1292f, 1200, 2608));
+    }
+
+    @Test
+    public void takenInSplit_notFullScreenShape() {
+        assertFalse(HgSplitPreview.fullScreenShape(MULTI_WINDOW, 1200f, 2608f, 1200, 2608));
+    }
+
+    @Test
+    public void floatingWindow_notFullScreenShape() {
+        assertFalse(HgSplitPreview.fullScreenShape(FREEFORM, 1200f, 2608f, 1200, 2608));
+    }
+
+    @Test
+    public void unknownDisplay_notFullScreenShape() {
+        assertFalse(HgSplitPreview.fullScreenShape(FULLSCREEN, 1200f, 2608f, 0, 0));
+    }
+
+    // showsPreSplit: the card shows the app's last full-screen screenshot instead of the icon
+
+    /** Slack after leaving split, its full-screen screenshot from before held: shown. */
+    @Test
+    public void iconCardWithPreSplit_showsPreSplit() {
+        assertTrue(HgSplitPreview.showsPreSplit(true, false, FULLSCREEN, true,
+                1200f, 1292f, 1200f, 2608f, 800, 1740));
+    }
+
+    /** The option off: the icon card, as before. */
+    @Test
+    public void optionOff_iconCard() {
+        assertFalse(HgSplitPreview.showsPreSplit(false, false, FULLSCREEN, true,
+                1200f, 1292f, 1200f, 2608f, 800, 1740));
+    }
+
+    /** A locked app (App lock) never shows an old screenshot. */
+    @Test
+    public void appLocked_noPreSplit() {
+        assertFalse(HgSplitPreview.showsPreSplit(true, true, FULLSCREEN, true,
+                1200f, 1292f, 1200f, 2608f, 800, 1740));
+    }
+
+    /** No screenshot from before the split: the icon card. */
+    @Test
+    public void noPreSplit_iconCard() {
+        assertFalse(HgSplitPreview.showsPreSplit(true, false, FULLSCREEN, true,
+                1200f, 1292f, 0f, 0f, 800, 1740));
+    }
+
+    /** A card that is no icon card keeps its own screenshot. */
+    @Test
+    public void fullScreenSnapshotNow_ownShown() {
+        assertFalse(HgSplitPreview.showsPreSplit(true, false, FULLSCREEN, true,
+                1200f, 2608f, 1200f, 2608f, 800, 1740));
+    }
+
+    /** Half of a split pair card keeps its half. */
+    @Test
+    public void splitPairHalf_ownShown() {
+        assertFalse(HgSplitPreview.showsPreSplit(true, false, MULTI_WINDOW, false,
+                1200f, 1292f, 1200f, 2608f, 800, 860));
+    }
+
+    /** The screenshot from before was taken in landscape: it does not fit, the icon card. */
+    @Test
+    public void landscapePreSplit_iconCard() {
+        assertFalse(HgSplitPreview.showsPreSplit(true, false, FULLSCREEN, true,
+                1200f, 1292f, 2608f, 1200f, 800, 1740));
+    }
 }

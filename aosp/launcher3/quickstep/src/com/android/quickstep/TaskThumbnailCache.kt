@@ -67,6 +67,22 @@ constructor(
         val inSplit =
             data?.windowingMode == android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW
         hgLast.remember(taskId, data, inSplit)
+        // The full-screen ones are kept for after a split, while the option is on (TaskView)
+        val bitmap = data?.thumbnail ?: return
+        if (!HgRecentsSettings.isOn(context, HgRecentsSettings.PRE_SPLIT_PREVIEW)) {
+            hgPreSplit.clear()
+            return
+        }
+        val display = context.resources.displayMetrics
+        val fullScreen =
+            HgSplitPreview.fullScreenShape(
+                data.windowingMode,
+                bitmap.width.toFloat(),
+                bitmap.height.toFloat(),
+                display.widthPixels,
+                display.heightPixels,
+            )
+        hgPreSplit.remember(taskId, data, fullScreen)
     }
     private val enableTaskSnapshotPreloading =
         context.resources.getBoolean(R.bool.config_enableTaskSnapshotPreloading)
@@ -362,12 +378,14 @@ constructor(
     fun clear() {
         cache.evictAll()
         hgLast.clear() // HyperGestures
+        hgPreSplit.clear() // HyperGestures
     }
 
     /** Removes the cached thumbnail for the given task. */
     fun remove(key: TaskKey) {
         cache.remove(key)
         hgLast.forget(key.id) // HyperGestures
+        hgPreSplit.forget(key.id) // HyperGestures
     }
 
     /** Returns The cache size. */
@@ -392,5 +410,11 @@ constructor(
 
     companion object {
         const val TAG = "TaskThumbnailCache"
+
+        /**
+         * HyperGestures: each task's last full-screen screenshot, shown on its card after a split
+         * (TaskView.hgPreSplitState). Process-wide, as the card reads it; 6 tasks.
+         */
+        @JvmField val hgPreSplit = HgPreSplitThumbnails<ThumbnailData>(6)
     }
 }

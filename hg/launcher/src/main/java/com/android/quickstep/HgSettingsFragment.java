@@ -135,6 +135,8 @@ public final class HgSettingsFragment extends PreferenceFragmentCompat {
                 R.string.hg_settings_lock_swipe, R.string.hg_settings_lock_swipe_summary);
         addGlobalSwitch(recents, HgRecentsSettings.CORNER_DRAG,
                 R.string.hg_settings_corner_drag, R.string.hg_settings_corner_drag_summary);
+        addGlobalSwitch(recents, HgRecentsSettings.PRE_SPLIT_PREVIEW,
+                R.string.hg_settings_pre_split, R.string.hg_settings_pre_split_summary);
         ContentResolver cr = ctx.getContentResolver();
         addSwitch(recents, R.string.hg_settings_show_mem, R.string.hg_settings_show_mem_summary,
                 () -> Settings.System.getInt(cr, HgRamIndicator.SHOW_MEM_INFO, 0) != 0,

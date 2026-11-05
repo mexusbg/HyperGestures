@@ -1031,7 +1031,7 @@ constructor(
             val mapOfTasks = state.tasks.associateBy { it.taskId }
             taskContainers.forEach { container ->
                 val taskId = container.task.key.id
-                val containerState = mapOfTasks[taskId]
+                val containerState = hgPreSplitState(container, mapOfTasks[taskId])
                 val shouldHaveHeader = (type == TaskViewType.DESKTOP)
                 val shouldShowAppTimer =
                     (type == TaskViewType.SINGLE || type == TaskViewType.GROUPED)
@@ -1102,6 +1102,41 @@ constructor(
                 taskDismissButton?.setOnClickListener(null)
             }
         }
+    }
+
+    /**
+     * HyperGestures: a card that would show the icon card (HgSplitPreview: only a half-screen
+     * snapshot of an app in, or just out of, HyperOS's split) shows the app's last full-screen
+     * screenshot instead (HgPreSplitThumbnails), if the option is on and there is one that fits.
+     */
+    private fun hgPreSplitState(container: TaskContainer, state: TaskData?): TaskData? {
+        if (state !is TaskData.Data) return state
+        val current = state.thumbnailData ?: return state
+        val thumbnail = current.thumbnail ?: return state
+        val pre = com.android.quickstep.TaskThumbnailCache.hgPreSplit.lastOf(state.taskId)
+        val preBitmap = pre?.thumbnail ?: return state
+        if (pre === current) return state
+        val on =
+            com.android.quickstep.HgRecentsSettings.isOn(
+                context,
+                com.android.quickstep.HgRecentsSettings.PRE_SPLIT_PREVIEW,
+            )
+        val shows =
+            com.android.quickstep.HgSplitPreview.showsPreSplit(
+                on,
+                state.isAppLocked,
+                current.windowingMode,
+                container.stagePosition == STAGE_POSITION_UNDEFINED,
+                thumbnail.width.toFloat(),
+                thumbnail.height.toFloat(),
+                preBitmap.width.toFloat(),
+                preBitmap.height.toFloat(),
+                container.snapshotView.width,
+                container.snapshotView.height,
+            )
+        if (!shows) return state
+        Log.d(TAG, "task ${state.taskId}: half-screen snapshot, showing the one from before split")
+        return state.copy(thumbnailData = pre)
     }
 
     private fun updateThumbnailValidity(container: TaskContainer) {

@@ -106,6 +106,7 @@ public final class HgLogCollector {
             HgRecentsSettings.BLUR_FALLBACK, HgRecentsSettings.HEADER,
             HgRecentsSettings.ICON_SHAPE, HgRecentsSettings.CARD_ACTIONS,
             HgRecentsSettings.CARD_LOCK_SWIPE, HgRecentsSettings.CORNER_DRAG,
+            HgRecentsSettings.PRE_SPLIT_PREVIEW,
             HgRecentsSettings.SPLIT_GESTURE, HgRecentsSettings.FLOATING_SHRINK,
             HgRecentsSettings.CLEAR_KILLS, HgRecentsSettings.DISMISS_KILLS,
             HgRecentsSettings.BACK_STYLE,

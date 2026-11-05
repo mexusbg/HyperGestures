@@ -99,6 +99,10 @@
     <string name="hg_settings_corner_drag">Corner targets while swiping up</string>
     <string name="hg_settings_corner_drag_summary">Drag an app to a top corner for split screen or
         a floating window</string>
+    <!-- Cards of apps in, or just out of, split screen (HgPreSplitThumbnails) -->
+    <string name="hg_settings_pre_split">Previews after split screen</string>
+    <string name="hg_settings_pre_split_summary">Show the app as it was before the split. Off: its
+        icon</string>
     <string name="hg_settings_show_mem">Show memory</string>
     <string name="hg_settings_show_mem_summary">Free memory under the cards (shared with
         HyperOS)</string>
