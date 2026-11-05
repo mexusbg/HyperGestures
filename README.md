@@ -50,6 +50,8 @@ The settings page:
 - **Card actions as on HyperOS:** swipe a card up to close the app, pull it down to lock it,
   hold it for Lock, Split screen, Floating window and App info, tap the trash button to clear
   all (locked apps stay). MIUI's own vibrations for clearing and locking.
+- **Previews after split screen:** an app you just used in split screen shows how it looked
+  before the split, not a half-screen picture (optional; off shows its icon instead).
 - **Split screen and floating windows on the way up:** while swiping up from an app, drag it to
   a top corner.
 - **MIUI back arrow:** the HyperOS bulge and chevron, MiuiHome's rule for when a swipe counts as
@@ -72,7 +74,8 @@ The settings page:
   (Android 17), and the 4.0.0.11 and 4.0.0.13 betas. Other HyperOS 4 phones and firmware may
   work: the app reads HyperOS's split-screen interfaces from the phone itself, the module sets
   up on any build, and if gestures don't come up at boot it rolls back to stock on its own.
-- **Root:** KernelSU, with a module mount (a metamodule such as Hybrid Mount works).
+- **Root:** KernelSU, with a module mount (a metamodule such as Hybrid Mount works). KernelSU
+  forks such as ReSukiSU (BakaSU) work too, with one manual step (see Install). ReSuSFS works.
 - **Home:** a third-party launcher set as the default home app.
 - **Optional:** LSPosed, for the notification icon fix.
 
@@ -85,6 +88,11 @@ The settings page:
    and **reboot fully** (not a soft reboot).
 4. For the notification icon fix: in LSPosed, enable **HyperGestures notification icons** for
    System UI and AOD, turn on **Fix notification icons** in HyperGestures' settings, and reboot.
+5. **ReSukiSU (BakaSU) and other KernelSU forks that can't set App Profiles** (the installer
+   tells you): in the KernelSU manager open **Superuser**, menu, **Show system apps**, tap
+   **HyperGestures**, set the App Profile to **Custom** and turn **Umount modules** off. Then
+   reboot. On a first install the app appears in that list only after the first reboot. Without
+   this, HyperGestures crashes at start and the module rolls back to stock.
 
 **Updates:** KernelSU shows when a new version is out (Modules, HyperGestures, Update), with the
 changelog. Install it and reboot. You can also install a newer zip over the old one by hand.
