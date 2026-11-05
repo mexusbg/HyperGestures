@@ -39,6 +39,11 @@ if [ -f "$MODPATH/common/functions.sh" ]; then
   else
     ui_print "! mount: $HG_MOUNT_DESC, but $MODPATH/skip_mount could not be removed: the metamodule will not mount system/ at the next boot"
   fi
+  # A KernelSU fork whose ksud can't set App Profiles (ReSukiSU): only the owner can keep the
+  # module's mounts in our app's process (hg_ksu_keep_mounts).
+  if hg_ksu_no_profile_api; then
+    ui_print "! this KernelSU can't set HyperGestures' App Profile, so set it yourself or the app will crash: $HG_KSU_MANUAL_STEP (on a first install it is listed after the reboot; then reboot again)"
+  fi
 else
   ui_print "! $MODPATH/common/functions.sh is missing: skip_mount is left to the first boot's post-fs-data.sh"
 fi

@@ -16,7 +16,7 @@ if [ -f "$HG_DATA/original-nav.txt" ]; then
 else
   echo "no recorded nav state: the module never changed navigation"
 fi
-mkdir -p "$HG_DATA" && hg_boot_id > "$HG_DATA/restored"
+hg_mkdir "$HG_DATA" && hg_boot_id > "$HG_DATA/restored"
 rc=0
 hg_restore_all || rc=1
 hg_restore_home || rc=1

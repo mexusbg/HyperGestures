@@ -349,6 +349,33 @@ setup; kprof 10315 true; stub ksud "case \"\$1 \$2\" in \"profile get\") cat \"$
 r1=0; hg_ksu_keep_mounts && r1=1; r2=0; hg_ksu_keep_mounts && r2=1
 if [ "$r1$r2" = 00 ] && [ -f "$T/kset" ] && [ "$(grep -c "ksud profile set succeeded, but" "$T/data/log.txt")" = 1 ]; then
   ok ksu_profile_set_that_did_not_stick_is_not_a_success; else bad "ksu_profile_set_that_did_not_stick_is_not_a_success ($r1$r2)"; fi
+# A KernelSU fork whose ksud has no `profile get/set` (ReSukiSU/BakaSU 4.2.0-rc3: get-sepolicy,
+# set-sepolicy and templates only; owner's phone, 2026-11-05): the profile can't be set from here,
+# so it is marked for the owner's manual step (ksu-manual) and logged with that step.
+noapi_ksud() {
+  printf 'Manage App Profiles\n\nUsage: ksud profile <COMMAND>\n\nCommands:\n  get-sepolicy     get root profile selinux policy\n  set-sepolicy     set root profile selinux policy\n  get-template     get template of <id>\n  help             Print this message\n' > "$T/khelp"
+  stub ksud "case \"\$1 \$2\" in \"profile --help\") cat \"$T/khelp\";; \"profile get\") echo \"error: unrecognized subcommand 'get'\" >&2; exit 2;; *) exit 1;; esac"
+}
+setup; noapi_ksud
+if ! hg_ksu_keep_mounts && [ -f "$T/data/ksu-manual" ] && ! has "ksud profile set" \
+   && grep -q "KernelSU profile: this ksud has no .profile get/set" "$T/data/log.txt" && grep -q "Umount modules off" "$T/data/log.txt"; then
+  ok ksu_profile_without_a_profile_api_marks_the_manual_step; else bad ksu_profile_without_a_profile_api_marks_the_manual_step; fi
+setup; : > "$T/data/ksu-manual" # the default ksud stub fails: no KernelSU at all, nothing for the owner to set
+if ! hg_ksu_keep_mounts && [ ! -e "$T/data/ksu-manual" ]; then ok ksu_profile_absent_ksud_needs_no_manual_step; else bad ksu_profile_absent_ksud_needs_no_manual_step; fi
+setup; : > "$T/data/ksu-manual"; kprof 10315 false
+if ! hg_ksu_keep_mounts && [ ! -e "$T/data/ksu-manual" ]; then ok ksu_profile_api_back_drops_the_manual_step; else bad ksu_profile_api_back_drops_the_manual_step; fi
+# The rollback notice names the manual step when our app is what failed, and only then.
+setup; mkmod; : > "$T/data/ksu-manual"; hg_rollback "com.hypergestures crashed 2 times since setup" "$T/svc" >/dev/null 2>&1
+if notified | grep -q "App Profile" && notified | grep -q "Umount modules off" && grep -q "Umount modules" "$T/data/health-status" \
+   && grep -q "rollback: likely cause: KernelSU unmounts" "$T/data/log.txt"; then
+  ok rollback_of_our_crash_names_the_ksu_manual_step; else bad "rollback_of_our_crash_names_the_ksu_manual_step ($(notified))"; fi
+setup; mkmod; : > "$T/data/ksu-manual"; hg_rollback "provider not bound at 4 checks in a row" "$T/svc" >/dev/null 2>&1
+if notified | grep -q "Umount modules off"; then ok rollback_of_an_unbound_provider_names_the_ksu_manual_step; else bad rollback_of_an_unbound_provider_names_the_ksu_manual_step; fi
+setup; mkmod; : > "$T/data/ksu-manual"; hg_rollback "com.android.systemui crashed 2 times since setup" "$T/svc" >/dev/null 2>&1
+if ! notified | grep -q "Umount modules" && notified | grep -q "Reboot to finish"; then
+  ok rollback_of_a_systemui_crash_leaves_the_ksu_step_out; else bad rollback_of_a_systemui_crash_leaves_the_ksu_step_out; fi
+setup; mkmod; hg_rollback "com.hypergestures crashed 2 times since setup" "$T/svc" >/dev/null 2>&1
+if ! notified | grep -q "Umount modules"; then ok rollback_without_the_marker_leaves_the_ksu_step_out; else bad rollback_without_the_marker_leaves_the_ksu_step_out; fi
 setup; mkdir -p "$T/mod" "$T/pkgcache/x"; : > "$T/pkgcache/x/HyperGestures-1-2"; kprof 10315 true; hg_post_fs_data_main "$T/mod"
 if [ ! -e "$T/pkgcache/x/HyperGestures-1-2" ] && [ -f "$T/kset" ]; then
   ok post_fs_data_drops_cache_and_sets_ksu_profile; else bad post_fs_data_drops_cache_and_sets_ksu_profile; fi
@@ -1942,15 +1969,45 @@ if [ "$HG_WD" = 0 ] && [ ! -e "$T/mod/disable" ] && [ "$_hg_cr_ref" = "0 0" ]; t
   ok watchdog_fallback_ignores_a_dump_that_failed_or_was_cut_short; else bad "watchdog_fallback_ignores_a_dump_that_failed_or_was_cut_short ($HG_WD)"; fi
 wsetup; dbe system_app_crash "$SUI"; dbe system_app_crash "$SUI"; hg_watchdog_loop "$T/mod"
 if [ ! -f "$T/sleeps" ] && [ -f "$T/mod/disable" ]; then ok watchdog_loop_ends_after_a_rollback; else bad watchdog_loop_ends_after_a_rollback; fi
-hsetup 'WATCHDOG=1\n' 120 # end to end: healthy after the window, then SystemUI starts crashing
+hsetup 'WATCHDOG=1\n' 120 # end to end: healthy (passed early: 2 fast checks), then SystemUI starts crashing
 tick() { advance "$1"; read _u _r < "$T/uptime"; [ "${_u%%.*}" -ge 2711 ] && [ ! -f "$T/crashed" ] || return 0
   : > "$T/crashed"; dbe system_app_crash "$SUI"; dbe system_app_crash "$SUI"; }
 hg_service_main "$T/svc"
 tick() { advance "$1"; crash_tick; }
 if rolled_back "$T/svc" && grep -q "health check passed" "$T/data/log.txt" && on "$THREEBUTTON" \
-   && notified | grep -qF "com.android.systemui crashed 2 times within 10 minutes" && [ "$(wc -l < "$T/sleeps")" = 22 ] \
-   && [ "$(grep -c '^dumpsys activity' "$T/calls")" = 11 ]; then
+   && notified | grep -qF "com.android.systemui crashed 2 times within 10 minutes" && [ "$(wc -l < "$T/sleeps")" = 17 ] \
+   && [ "$(grep -c '^dumpsys activity' "$T/calls")" = 4 ]; then
   ok watchdog_catches_a_crash_loop_that_starts_after_the_window; else bad "watchdog_catches_a_crash_loop_that_starts_after_the_window ($(hstatus); $(wc -l < "$T/sleeps") sleeps, $(grep -c '^dumpsys activity' "$T/calls") dumps)"; fi
+
+# With the watchdog on (it keeps the crash-loop watch after), the health check passes as soon as
+# every end-of-window check holds at HG_HEALTH_PASSES checks in a row, HG_HEALTH_FAST_TICK s apart
+# (owner, 2026-11-04: "Active, checking" for 2-4.5 min after each boot). The watchdog is stopped
+# at its first sleep after the pass (marker watchdog-stop), so these tests end there.
+wd_stop_after_pass() { advance "$1"; crash_tick; grep -q "health check passed" "$T/data/log.txt" 2>/dev/null \
+  && : > "$T/data/watchdog-stop"; return 0; }
+first_sleeps() { head -n "$1" "$T/sleeps" 2>/dev/null | tr '\n' ' '; }
+hsetup 'WATCHDOG=1\n' 120; tick() { wd_stop_after_pass "$1"; }; hg_service_main "$T/svc"; tick() { advance "$1"; crash_tick; }
+if healthy && [ "$(first_sleeps 2)" = "5 5 " ] && hstatus | grep -q 'gesture monitor registered' \
+   && grep -q "health check passed after 10 s" "$T/data/log.txt" && [ "$(grep -c '^dumpsys activity' "$T/calls")" -le 4 ]; then
+  ok health_with_watchdog_passes_after_two_good_checks; else bad "health_with_watchdog_passes_after_two_good_checks ($(hstatus); sleeps $(sleeps))"; fi
+hsetup 'WATCHDOG=1\n' 120; cp "$FIX/input_monitor_missing.txt" "$T/input"; hg_service_main "$T/svc"
+F24="5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 "
+if rolled_back "$T/svc" && [ "$(first_sleeps 25)" = "${F24}15 " ] \
+   && notified | grep -qF "${HEALTH_FAIL}gesture monitor not registered (no [Gesture Monitor] swipe-up owned by com.hypergestures)$HEALTH_TAIL"; then
+  ok health_with_watchdog_still_waits_the_window_for_a_missing_monitor; else bad "health_with_watchdog_still_waits_the_window_for_a_missing_monitor ($(hstatus); sleeps $(sleeps))"; fi
+# An unbound provider is let through as long as before (15 s: 3 checks 5 s apart), not 2 checks.
+hsetup 'WATCHDOG=1\n' 120
+seq_dumpsys sysui_connected.txt sysui_disconnected.txt sysui_disconnected.txt sysui_disconnected.txt sysui_connected.txt
+tick() { wd_stop_after_pass "$1"; }; hg_service_main "$T/svc"; tick() { advance "$1"; crash_tick; }
+if healthy && [ "$(first_sleeps 5)" = "5 5 5 5 5 " ]; then ok health_with_watchdog_lets_15_s_unbound_through
+else bad "health_with_watchdog_lets_15_s_unbound_through ($(hstatus); sleeps $(sleeps))"; fi
+hsetup 'WATCHDOG=1\n' 120; seq_dumpsys sysui_connected.txt sysui_disconnected.txt; hg_service_main "$T/svc"
+if rolled_back "$T/svc" && [ "$(first_sleeps 4)" = "5 5 5 5 " ] \
+   && notified | grep -qF "${HEALTH_FAIL}provider not bound at 4 checks in a row$HEALTH_TAIL"; then
+  ok health_with_watchdog_rolls_back_a_provider_unbound_for_4_checks; else bad "health_with_watchdog_rolls_back_a_provider_unbound_for_4_checks ($(hstatus); sleeps $(sleeps))"; fi
+hsetup 'WATCHDOG=1\n' 120; crash_at 1 "$SUI"; hg_service_main "$T/svc"
+if rolled_back "$T/svc" && [ "$(first_sleeps 1)" = "5 " ] && notified | grep -qF "crashed 2 times"; then
+  ok health_with_watchdog_still_rolls_back_a_crash_loop; else bad "health_with_watchdog_still_rolls_back_a_crash_loop ($(hstatus); sleeps $(sleeps))"; fi
 
 # The deferred restore (guard, uninstall.sh) gives HOME back to MiuiHome too; a failure counts.
 setup; printf 'FSG=1\nNAVBAR=\n' > "$T/data/original-nav.txt"; hg_restore_after_boot mark
@@ -2179,11 +2236,42 @@ stub dumpsys "cat \"$T/data/health-status\" >> \"$T/hs-seen\"; cat \"$FIX/sysui_
 if grep -q "^pending: waiting for the provider (this boot's setup has not finished) (" "$T/hs-seen" && ! grep -q '^ok' "$T/hs-seen" \
    && hstatus | grep -q '^not run: provider not bound'; then
   ok health_status_is_pending_while_this_boot_waits_for_the_provider; else bad "health_status_is_pending_while_this_boot_waits_for_the_provider ($(sort -u "$T/hs-seen" 2>/dev/null))"; fi
+# The guard install at boot can fail for a moment (owner's phone, 2026-11-05: the first boot with
+# ReSuSFS, whose boot-completed scripts run alongside; every step worked when replayed later). It
+# is tried HG_GUARD_TRIES times, HG_GUARD_RETRY s apart, and each failure names its step and error.
+setup; mkmod
+cp() { if [ ! -f "$T/cp-once" ]; then : > "$T/cp-once"; echo "cp: boom" >&2; return 1; fi; command cp "$@"; }
+r=1; hg_install_guard "$T/svc" && r=0; unset -f cp
+if [ "$r" = 0 ] && [ -x "$HG_GUARD" ] && [ -f "$T/data/functions.sh" ] && [ "$(first_sleeps 5)" = "5 " ] \
+   && grep -q "guard install: try 1 of 3 failed at copying functions.sh: cp: boom; trying again in 5 s" "$T/data/log.txt" \
+   && ! grep -q "guard install FAILED" "$T/data/log.txt"; then
+  ok guard_install_retries_a_passing_failure; else bad "guard_install_retries_a_passing_failure ($r, $(first_sleeps 5), $(tail -n 2 "$T/data/log.txt"))"; fi
+setup; mkmod; : > "$T/notadir"; HG_GUARD="$T/notadir/hypergestures-guard.sh"
+if ! hg_install_guard "$T/svc" 2>/dev/null && [ "$(first_sleeps 5)" = "5 5 " ] \
+   && grep -q "guard install FAILED after 3 tries, at creating the folders: .*notadir" "$T/data/log.txt"; then
+  ok guard_install_failure_names_its_step_and_error; else bad "guard_install_failure_names_its_step_and_error ($(first_sleeps 5), $(tail -n 1 "$T/data/log.txt"))"; fi
 setup; mkmod; printf 'NAV_MODE=gestural\nWATCHDOG=0\n' > "$T/data/config"; : > "$T/notadir"
 echo "ok: provider bound, no crash loop, gesture monitor registered (2026-09-29 14:32:00)" > "$T/data/health-status"
 HG_GUARD="$T/notadir/hypergestures-guard.sh"; hg_service_main "$T/svc" 2>/dev/null
 if hstatus | grep -q '^not run: the undo guard could not be installed, nothing changed ('; then
   ok health_status_records_an_aborted_setup; else bad "health_status_records_an_aborted_setup ($(hstatus))"; fi
+# ReSuSFS (owner's phone, 2026-11-05): in KernelSU's module scripts mkdir("/") fails with EINVAL,
+# so busybox `mkdir -p`, which walks the path from "/" and tolerates only EEXIST, fails on every
+# path, even existing ones. busy_mkdir mimics it: any -p fails, a plain mkdir works.
+busy_mkdir() { mkdir() { case " $* " in *" -p "*) echo "mkdir: can't create directory '/': Invalid argument" >&2; return 1 ;; esac; command mkdir "$@"; }; }
+setup; mkmod; rm -rf "$T/svc.d"; HG_GUARD="$T/svc.d/deep/hypergestures-guard.sh"; busy_mkdir
+r=1; hg_install_guard "$T/svc" && r=0; unset -f mkdir
+if [ "$r" = 0 ] && [ -x "$HG_GUARD" ] && [ -z "$(first_sleeps 1)" ]; then
+  ok guard_install_needs_no_mkdir_p; else bad "guard_install_needs_no_mkdir_p ($r, $(tail -n 1 "$T/data/log.txt"))"; fi
+setup; busy_mkdir; rm -rf "$T/data"; hg_health_status active "ok: test"; hg_log_once "made the folder"; unset -f mkdir
+if hstatus | grep -q "^ok: test" && grep -q "made the folder" "$T/data/log-once" 2>/dev/null; then
+  ok data_writes_need_no_mkdir_p; else bad data_writes_need_no_mkdir_p; fi
+setup; if ! grep -n 'mkdir -p' "$TPL/common/functions.sh" "$TPL"/*.sh | grep -v '^[^:]*:[0-9]*: *#' | grep -v 'hg_mkdir()' | grep -v '# hg_mkdir: ' | grep -q .; then
+  ok module_scripts_use_hg_mkdir; else bad "module_scripts_use_hg_mkdir ($(grep -n 'mkdir -p' "$TPL/common/functions.sh" "$TPL"/*.sh | head -n 3))"; fi
+setup; rm -rf "$T/mk"; mkdir -p "$T/mk/a"; : > "$T/afile"; busy_mkdir
+if hg_mkdir "$T/mk/a" "$T/mk/b/c/d" && [ -d "$T/mk/b/c/d" ] && ! hg_mkdir "$T/afile/x" 2>/dev/null \
+   && (cd "$T/mk" && hg_mkdir rel/x/y && [ -d rel/x/y ]); then
+  unset -f mkdir; ok hg_mkdir_creates_only_what_is_missing; else unset -f mkdir; bad hg_mkdir_creates_only_what_is_missing; fi
 
 # --- customize.sh: the mount decision at install time -----------------------------------------
 # KernelSU's installer sources customize.sh with $MODPATH = the new module dir (an update lands in
@@ -2213,6 +2301,12 @@ if grep -q "^ui: ! mount: self (MOUNT=self), but .*skip_mount could not be creat
 setup; printf 'MOUNT=self\n' > "$T/data/config"; cz no-functions
 if [ ! -e "$T/upd/skip_mount" ] && grep -q "^ui: ! .*common/functions.sh is missing" "$T/out" && grep -q "^after: done$" "$T/out"; then
   ok customize_without_functions_sh_leaves_skip_mount_to_post_fs_data; else bad "customize_without_functions_sh_leaves_skip_mount_to_post_fs_data ($(cat "$T/out"))"; fi
+# A ksud without `profile set` (ReSukiSU): the installer tells the owner the manual step up front.
+setup; noapi_ksud; cz
+if grep -q "^ui: ! .*App Profile.*Umount modules off" "$T/out" && grep -q "^after: done$" "$T/out"; then
+  ok customize_names_the_ksu_manual_step_without_a_profile_api; else bad "customize_names_the_ksu_manual_step_without_a_profile_api ($(cat "$T/out"))"; fi
+setup; cz
+if ! grep -q "Umount modules" "$T/out"; then ok customize_without_ksud_says_nothing_of_profiles; else bad customize_without_ksud_says_nothing_of_profiles; fi
 # Every extracted file, however deep, is dated to the install time: the zip's entries all carry
 # the build's fixed date, and a metamodule syncing by size and mtime would keep an old APK of the
 # same size. Symlinks are left alone (touch would date their target), modes are kept.

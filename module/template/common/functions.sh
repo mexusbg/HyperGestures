@@ -149,12 +149,18 @@ HG_HIDE_LINE=$HG_PKG:HgHideGestureLine # the app's fabricated overlay (HgHideGes
 HG_MIUIHOME=com.miui.home
 : "${HG_HEALTH_WINDOW:=120}" # s the health check watches after setup (not a setting; tests shorten it)
 HG_HEALTH_TICK=15    # s between its checks
+HG_HEALTH_FAST_TICK=5 # s between them while the watchdog is on (it passes early then)
+HG_HEALTH_PASSES=2   # healthy checks in a row that pass it early
 : "${HG_ROLLBACK_WATCH:=600}" # s hg_after_rollback watches (not a setting; tests shorten it)
 HG_CRASH_WINDOW=600  # s: 2 crashes of SystemUI or our package this close together are a crash loop
 # Our settings page's own process (HgSettingsActivity, android:process=":settings"): its crashes
 # don't count, it runs neither recents nor gestures. Every other process of ours does.
 HG_CRASH_IGNORED="$HG_PKG:settings"
 HG_KSU_HEAL_MAX=3    # restores of a reset KernelSU profile per boot (hg_ksu_heal)
+HG_GUARD_TRIES=3     # tries of the guard install at setup (hg_install_guard), and
+HG_GUARD_RETRY=5     # s between them
+# The owner's step when ksud can't set our App Profile (hg_ksu_no_profile_api; ReSukiSU's manager).
+HG_KSU_MANUAL_STEP="in the KernelSU manager app open Superuser, menu > Show system apps, HyperGestures, set App Profile to Custom and turn Umount modules off"
 # dropbox tags holding crashes: Java crashes, and native ones (ActivityManager writes the same
 # "Process: NAME" header on both, so one parser reads them all). The dumpsys fallback
 # (hg_crash_sample): a tag with no entries still prints the "Drop box contents:" header and counts 0.
@@ -169,10 +175,33 @@ HG_LOG_MAX=262144    # bytes: a bigger log.txt is moved to log.old.txt at boot (
 HG_MIRROR_ROUNDS=5   # watchdog rounds between copies of a changed log for the app (hg_mirror_sync)
 : "${HG_MIRROR_TIMEOUT:=10}" # s one log copy as the app's uid may take (hg_timeout_k; tests shorten it)
 
+# `mkdir -p` for every directory named, creating only the missing ones, deepest last, with plain
+# mkdir. Under ReSuSFS (owner's phone, 2026-11-05) mkdir("/") fails with EINVAL in KernelSU's
+# module scripts, and busybox `mkdir -p` walks every path from "/" and accepts only EEXIST, so it
+# failed even for directories that exist. 0 when all of them are directories afterwards.
+hg_mkdir() {
+  for _hg_mk in "$@"; do
+    [ -d "$_hg_mk" ] && continue
+    _hg_mp="$_hg_mk"; _hg_mm=""
+    while [ -n "$_hg_mp" ] && [ ! -d "$_hg_mp" ]; do # the missing ones, shallowest first
+      _hg_mm="$_hg_mp
+$_hg_mm"
+      case "$_hg_mp" in */*) _hg_mp="${_hg_mp%/*}" ;; *) _hg_mp="" ;; esac
+    done
+    while IFS= read -r _hg_mp; do
+      [ -n "$_hg_mp" ] || continue
+      mkdir "$_hg_mp" 2>/dev/null || [ -d "$_hg_mp" ] || { mkdir "$_hg_mp"; return 1; }
+    done <<EOF
+$_hg_mm
+EOF
+  done
+  return 0
+}
+
 # Appends to $HG_DATA/log.txt and mirrors to logcat (tag HyperGestures), which survives the
 # state dir being deleted after a successful uninstall. The app's copy follows by hg_mirror_sync.
 hg_log() {
-  mkdir -p "$HG_DATA"
+  hg_mkdir "$HG_DATA"
   _hg_lg="$(date '+%F %T') $*"
   echo "$_hg_lg" >> "$HG_DATA/log.txt"
   $HG_CMD_LOG -t HyperGestures "$*" >/dev/null 2>&1
@@ -587,7 +616,7 @@ hg_sysui_dump() {
 # (service.sh clears the file at boot). A file, not a variable: hg_sysui_dump runs in a pipeline.
 hg_sysui_dump_note() {
   [ -f "$HG_DATA/sysui-dump" ] && return 0
-  mkdir -p "$HG_DATA" && printf '%s\n' "$1" > "$HG_DATA/sysui-dump"
+  hg_mkdir "$HG_DATA" && printf '%s\n' "$1" > "$HG_DATA/sysui-dump"
   hg_log "$1"
 }
 
@@ -787,7 +816,7 @@ hg_apply_nav_mode() {
 
 hg_record_nav_state() {
   [ -f "$HG_DATA/original-nav.txt" ] && return 0
-  mkdir -p "$HG_DATA"
+  hg_mkdir "$HG_DATA"
   _hg_rnf="$(hg_timeout $HG_CMD_SETTINGS get global force_fsg_nav_bar 2>/dev/null)"
   _hg_rnn="$(hg_enabled_navbar_overlays | head -n 1)"
   printf 'FSG=%s\nNAVBAR=%s\n' "$_hg_rnf" "$_hg_rnn" > "$HG_DATA/original-nav.txt"
@@ -958,7 +987,7 @@ hg_power_set() {
 hg_power_mark() {
   if [ "$1" = 1 ]; then
     [ -f "$HG_DATA/power-pending" ] && return 0
-    mkdir -p "$HG_DATA" && : > "$HG_DATA/power-pending"
+    hg_mkdir "$HG_DATA" && : > "$HG_DATA/power-pending"
   else
     [ -f "$HG_DATA/power-pending" ] || return 0
     rm -f "$HG_DATA/power-pending"
@@ -984,7 +1013,7 @@ hg_power_exempt() {
       hg_log_once "battery: PowerKeeper's app list can't be read yet; will retry. HyperOS may freeze $HG_PKG briefly after screen-on"
       return 1
     fi
-    mkdir -p "$HG_DATA" && echo "${HG_BGC:-none}" > "$HG_DATA/original-bgcontrol"
+    hg_mkdir "$HG_DATA" && echo "${HG_BGC:-none}" > "$HG_DATA/original-bgcontrol"
   fi
   _hg_pwas="${HG_BGC:-none}"
   if hg_power_set noRestrict; then
@@ -1170,15 +1199,38 @@ hg_rollback_reboot_notice() {
 # Installs the disable-safe guard ($HG_GUARD) and the copy of this file it sources: KernelSU runs
 # /data/adb/service.d/* at every boot whatever this module's state. Temp file + rename, so a
 # guard (or copy) that is being read right now is never rewritten underneath its reader.
+# At boot it can fail for a moment (owner's phone, 2026-11-05: the first boot with ReSuSFS, whose
+# boot-completed scripts run alongside ours; every step worked when replayed later), so it is tried
+# HG_GUARD_TRIES times, HG_GUARD_RETRY s apart; each failure is logged with its step and error.
 hg_install_guard() { # $1 = module dir
-  mkdir -p "$HG_DATA" "${HG_GUARD%/*}" &&
-    cp "$1/common/functions.sh" "$HG_DATA/.functions.sh.tmp" &&
-    mv -f "$HG_DATA/.functions.sh.tmp" "$HG_DATA/functions.sh" &&
-    cp "$1/common/hypergestures-guard.sh" "$HG_DATA/.guard.tmp" &&
-    chmod 755 "$HG_DATA/.guard.tmp" &&
-    mv -f "$HG_DATA/.guard.tmp" "$HG_GUARD" && return 0
-  hg_log "guard install FAILED"
-  return 1
+  _hg_gt=1
+  while :; do
+    hg_install_guard_once "$1" && return 0
+    if [ "$_hg_gt" -ge "$HG_GUARD_TRIES" ]; then
+      hg_log "guard install FAILED after $_hg_gt tries, at $_hg_gstep: ${_hg_gerr:-no error text}"
+      return 1
+    fi
+    hg_log "guard install: try $_hg_gt of $HG_GUARD_TRIES failed at $_hg_gstep: ${_hg_gerr:-no error text}; trying again in $HG_GUARD_RETRY s"
+    sleep "$HG_GUARD_RETRY"
+    _hg_gt=$((_hg_gt + 1))
+  done
+}
+
+# One try of hg_install_guard. On failure: _hg_gstep = the step, _hg_gerr = its error output.
+hg_install_guard_once() {
+  _hg_gstep="creating the folders"
+  _hg_gerr="$(hg_mkdir "$HG_DATA" "${HG_GUARD%/*}" 2>&1)" || return 1
+  _hg_gstep="copying functions.sh"
+  _hg_gerr="$(cp "$1/common/functions.sh" "$HG_DATA/.functions.sh.tmp" 2>&1)" || return 1
+  _hg_gstep="renaming the functions.sh copy"
+  _hg_gerr="$(mv -f "$HG_DATA/.functions.sh.tmp" "$HG_DATA/functions.sh" 2>&1)" || return 1
+  _hg_gstep="copying the guard"
+  _hg_gerr="$(cp "$1/common/hypergestures-guard.sh" "$HG_DATA/.guard.tmp" 2>&1)" || return 1
+  _hg_gstep="making the guard executable"
+  _hg_gerr="$(chmod 755 "$HG_DATA/.guard.tmp" 2>&1)" || return 1
+  _hg_gstep="moving the guard to ${HG_GUARD%/*}"
+  _hg_gerr="$(mv -f "$HG_DATA/.guard.tmp" "$HG_GUARD" 2>&1)" || return 1
+  return 0
 }
 
 # Posts a notification ($1 = text; $2 = its tag, a plain word, default hypergestures: each notice
@@ -1719,7 +1771,7 @@ hg_log_once() {
   if [ -f "$HG_DATA/log-once" ]; then
     while IFS= read -r _hg_ll; do [ "$_hg_ll" = "$_hg_lk" ] && return 0; done < "$HG_DATA/log-once"
   fi
-  mkdir -p "$HG_DATA" && printf '%s\n' "$_hg_lk" >> "$HG_DATA/log-once"
+  hg_mkdir "$HG_DATA" && printf '%s\n' "$_hg_lk" >> "$HG_DATA/log-once"
   hg_log "$1"
 }
 
@@ -1986,6 +2038,13 @@ hg_health_final() {
   if ! hg_provider_bound; then
     HG_FINAL_WHY="provider not bound at the end of the health window"; return 1
   fi
+  hg_health_monitor
+}
+
+# The monitor part of hg_health_final (the provider already found bound); same rules and
+# HG_FINAL_WHY. Also each fast tick's second check (hg_health_check).
+hg_health_monitor() {
+  HG_FINAL_WHY=""
   hg_gestural_on || return 0
   hg_monitor_registered
   case $? in
@@ -2002,7 +2061,7 @@ hg_health_final() {
 # app (hg_publish_status).
 hg_health_status() {
   HG_STATE="$1"; shift; HG_HEALTH="$*"
-  mkdir -p "$HG_DATA" && echo "$* ($(date '+%F %T'))" > "$HG_DATA/health-status"
+  hg_mkdir "$HG_DATA" && echo "$* ($(date '+%F %T'))" > "$HG_DATA/health-status"
   hg_publish_status
 }
 
@@ -2040,23 +2099,44 @@ hg_boot_finished() {
 # at the next tick, with 2 (hg_restored_stop): nothing more is checked or re-applied. The
 # No-restrictions check (hg_power_retry, a VM each) runs at a tick only while power-pending
 # exists, and once at the end of the window.
+# With the watchdog on (WATCHDOG=1; it keeps the same crash-loop watch afterwards and falls back
+# to 3-button if the provider unbinds), the ticks are HG_HEALTH_FAST_TICK s apart and the check
+# passes early once the end-of-window checks (provider bound; monitor, hg_health_monitor) hold at
+# HG_HEALTH_PASSES ticks in a row (owner, 2026-11-04: it said "checking" for 2-4.5 min after each
+# boot). The unbound allowance stays the same length of time (HG_HEALTH_TICK s), and the
+# No-restrictions retry runs at most every HG_HEALTH_TICK s. Anything not yet healthy still gets
+# the whole window and its end checks.
 hg_health_check() {
-  hg_health_status active "running (checks for $HG_HEALTH_WINDOW s after setup)"
+  if [ "${WATCHDOG:-1}" = 1 ]; then
+    _hg_tick=$HG_HEALTH_FAST_TICK
+    hg_health_status active "running (passes once healthy at $HG_HEALTH_PASSES checks in a row, within $HG_HEALTH_WINDOW s after setup)"
+  else
+    _hg_tick=$HG_HEALTH_TICK
+    hg_health_status active "running (checks for $HG_HEALTH_WINDOW s after setup)"
+  fi
   if [ "${HEALTH_TEST:-}" = fail ]; then
     HEALTH_TEST=off
     hg_config_drop HEALTH_TEST
     hg_rollback "forced by HEALTH_TEST" "$1"; return 1
   fi
-  hg_log "health check: watching for $HG_HEALTH_WINDOW s"
-  _hg_ticks=$(( HG_HEALTH_WINDOW / HG_HEALTH_TICK ))
+  hg_log "health check: watching for up to $HG_HEALTH_WINDOW s, every $_hg_tick s"
+  _hg_ticks=$(( HG_HEALTH_WINDOW / _hg_tick ))
+  _hg_per=$(( HG_HEALTH_TICK / _hg_tick )) # ticks per HG_HEALTH_TICK s (1 or 3)
+  [ "$_hg_per" -ge 1 ] || _hg_per=1
+  _hg_unmax=$(( _hg_per + 1 )) # unbound checks in a row that fail: 2 slow, 4 fast (15 s)
   _hg_end=""
-  _hg_t="$(hg_uptime)" && _hg_end=$(( _hg_t + HG_HEALTH_WINDOW ))
+  _hg_t0=""
+  _hg_t="$(hg_uptime)" && _hg_end=$(( _hg_t + HG_HEALTH_WINDOW )) && _hg_t0="$_hg_t"
   _hg_unbound=0
+  _hg_good=0
+  _hg_n=0
+  _hg_early=""
   while [ "$_hg_ticks" -gt 0 ]; do
-    sleep "$HG_HEALTH_TICK"
+    sleep "$_hg_tick"
     _hg_ticks=$(( _hg_ticks - 1 ))
+    _hg_n=$(( _hg_n + 1 ))
     hg_restored_stop "health check" && return 2
-    if [ -f "$HG_DATA/power-pending" ]; then
+    if [ -f "$HG_DATA/power-pending" ] && [ $(( _hg_n % _hg_per )) = 0 ]; then
       hg_power_retry >/dev/null 2>&1
       hg_restored_stop "health check" && return 2 # restore.sh began during that retry
     fi
@@ -2065,11 +2145,18 @@ hg_health_check() {
     fi
     if hg_provider_bound; then
       _hg_unbound=0
+      if [ "$_hg_tick" != "$HG_HEALTH_TICK" ] && hg_health_monitor; then
+        _hg_good=$(( _hg_good + 1 ))
+        if [ "$_hg_good" -ge "$HG_HEALTH_PASSES" ]; then _hg_early=1; break; fi
+      else
+        _hg_good=0
+      fi
     else
+      _hg_good=0
       _hg_unbound=$(( _hg_unbound + 1 ))
       hg_log "health check: provider not bound ($_hg_unbound in a row)"
-      if [ "$_hg_unbound" -ge 2 ]; then
-        hg_rollback "provider not bound at 2 checks in a row" "$1"; return 1
+      if [ "$_hg_unbound" -ge "$_hg_unmax" ]; then
+        hg_rollback "provider not bound at $_hg_unmax checks in a row" "$1"; return 1
       fi
     fi
     if [ -n "$_hg_end" ] && _hg_t="$(hg_uptime)" && [ "$_hg_t" -ge "$_hg_end" ]; then break; fi
@@ -2077,7 +2164,10 @@ hg_health_check() {
   hg_restored_stop "health check" && return 2
   hg_power_retry >/dev/null 2>&1
   hg_restored_stop "health check" && return 2
-  if ! hg_health_final; then
+  if [ -n "$_hg_early" ]; then
+    _hg_after="after $(( _hg_n * _hg_tick )) s"
+    [ -n "$_hg_t0" ] && _hg_t="$(hg_uptime)" && _hg_after="after $(( _hg_t - _hg_t0 )) s"
+  elif ! hg_health_final; then
     hg_log "health check: $HG_FINAL_WHY; checking once more in $HG_HEALTH_TICK s"
     sleep "$HG_HEALTH_TICK"
     hg_restored_stop "health check" && return 2
@@ -2090,7 +2180,8 @@ hg_health_check() {
   fi
   if hg_gestural_on; then _hg_mon="gesture monitor registered"; else _hg_mon="no gesture monitor needed (not gestural)"; fi
   hg_health_status active "ok: provider bound, no crash loop, $_hg_mon"
-  hg_log "health check passed ($_hg_mon)"
+  if [ -n "$_hg_early" ]; then hg_log "health check passed $_hg_after ($_hg_mon)"
+  else hg_log "health check passed ($_hg_mon)"; fi
   rm -f "$HG_DATA/rollback-reboot" "$HG_DATA/rollback-reboot-told" # a later rollback may reboot again
   return 0
 }
@@ -2122,11 +2213,12 @@ hg_rollback() {
   hg_log "rollback: 3/6 HOME back to com.miui.home: $_hg_r3"
   if touch "$_hg_md/disable" 2>/dev/null && [ -f "$_hg_md/disable" ]; then _hg_r4=ok; else _hg_r4=FAILED; fi
   hg_log "rollback: 4/6 module disabled from the next boot ($_hg_md/disable): $_hg_r4"
-  if mkdir -p "$HG_DATA" 2>/dev/null && touch "$HG_DATA/restored" 2>/dev/null; then _hg_r5=ok; else _hg_r5=FAILED; fi
+  if hg_mkdir "$HG_DATA" 2>/dev/null && touch "$HG_DATA/restored" 2>/dev/null; then _hg_r5=ok; else _hg_r5=FAILED; fi
   hg_log "rollback: 5/6 restored marker (the watchdog leaves navigation alone): $_hg_r5"
   rm -f "$HG_DATA/boot-attempts"
-  hg_health_status rolled-back "FAILED: $1; rolled back (restore $_hg_r1, HOME $_hg_r3, disable $_hg_r4)"
-  _hg_msg="${3:-HyperGestures failed its health check ($1) and restored stock navigation. It is disabled; re-enable it in KernelSU after fixing. See $HG_DATA/log.txt.}"
+  _hg_kh="$(hg_ksu_manual_hint "$1")" && hg_log "rollback: likely cause: KernelSU unmounts modules for $HG_PKG (ksud has no profile set); the owner sets its App Profile by hand"
+  hg_health_status rolled-back "FAILED: $1; rolled back (restore $_hg_r1, HOME $_hg_r3, disable $_hg_r4)${_hg_kh:+. $_hg_kh}"
+  _hg_msg="${3:-HyperGestures failed its health check ($1) and restored stock navigation. It is disabled; re-enable it in KernelSU after fixing. See $HG_DATA/log.txt.}${_hg_kh:+ $_hg_kh}"
   [ "$_hg_r4" = ok ] || _hg_msg="$_hg_msg It could NOT disable itself: disable it in the KernelSU Manager app."
   [ "$_hg_r1$_hg_r3" = okok ] || _hg_msg="$_hg_msg Part of the restore FAILED: see runbook section 5."
   hg_notify "$_hg_msg Reboot to finish returning to stock."
@@ -2158,7 +2250,7 @@ hg_after_rollback() {
     hg_crash_scan "after the rollback"; _hg_arl=$?
     if [ "$_hg_arl" = 0 ] || [ -n "$HG_CRASH_SEEN" ]; then
       _hg_arw="${HG_CRASH_SEEN:-SystemUI or $HG_PKG}"
-      mkdir -p "$HG_DATA" && echo "$_hg_arw crashed again after the rollback" > "$HG_DATA/rollback-reboot"
+      hg_mkdir "$HG_DATA" && echo "$_hg_arw crashed again after the rollback" > "$HG_DATA/rollback-reboot"
       hg_log "after rollback: $_hg_arw crashed again; rebooting into stock (once)"
       $HG_CMD_REBOOT >/dev/null 2>&1 || $HG_CMD_REBOOT_FALLBACK >/dev/null 2>&1
       return 0
@@ -2179,7 +2271,7 @@ hg_after_rollback() {
 hg_boot_guard() {
   _hg_n="$(cat "$HG_DATA/boot-attempts" 2>/dev/null)"
   case "$_hg_n" in ''|*[!0-9]*) _hg_n=0 ;; esac
-  mkdir -p "$HG_DATA"
+  hg_mkdir "$HG_DATA"
   if [ "$_hg_n" -lt "$HG_BOOT_TRIES" ]; then
     # A marker nobody took (an older guard copy) must not roll back a module the owner re-enabled.
     rm -f "$HG_DATA/bootloop"
@@ -2238,7 +2330,7 @@ hg_load_config() {
 # Creates $HG_DATA/config from the module's config.default ($1 = module dir) if there is none.
 hg_ensure_config() {
   [ -f "$HG_DATA/config" ] && return 0
-  mkdir -p "$HG_DATA" && cp "$1/config.default" "$HG_DATA/config"
+  hg_mkdir "$HG_DATA" && cp "$1/config.default" "$HG_DATA/config"
 }
 
 # Prints MOUNT as post-fs-data, service.sh and action.sh see it (they source the config,
@@ -2494,7 +2586,7 @@ hg_mount_check() {
 # (mode metamodule) the same prefixed "metamodule + overlay " (the metamodule's own mount of system/
 # is not ours to record).
 hg_mount_status() {
-  mkdir -p "$HG_DATA"
+  hg_mkdir "$HG_DATA"
   echo "$*" > "$HG_DATA/mount-status"
   hg_log "payload mount: $*"
 }
@@ -2548,14 +2640,14 @@ hg_payload_mount() {
       hg_mount_status "${_hg_pre}FAILED: missing $1/${_hg_m%%:*} or ${_hg_m#*:}; nothing mounted"; return 1
     fi
   done
-  mkdir -p "$HG_STAGE"
+  hg_mkdir "$HG_STAGE"
   if ! $HG_CMD_MOUNT -t tmpfs -o mode=0755,size=64m hg_stage "$HG_STAGE"; then
     hg_mount_status "${_hg_pre}FAILED: tmpfs on $HG_STAGE; nothing mounted"; return 1
   fi
   _hg_staged=1
   for _hg_m in $_hg_map; do
     _hg_d="${_hg_m%%:*}"
-    mkdir -p "$HG_STAGE/$_hg_d" && cp -a "$1/$_hg_d/." "$HG_STAGE/$_hg_d/" || { _hg_staged=0; break; }
+    hg_mkdir "$HG_STAGE/$_hg_d" && cp -a "$1/$_hg_d/." "$HG_STAGE/$_hg_d/" || { _hg_staged=0; break; }
   done
   if [ "$_hg_staged" != 1 ] || ! $HG_CMD_CHCON -R u:object_r:system_file:s0 "$HG_STAGE"; then
     $HG_CMD_UMOUNT "$HG_STAGE"
@@ -2622,7 +2714,7 @@ hg_drop_apk_caches() {
   fi
   rm -f "$HG_RESCACHE"/*HyperGesturesOverlay* 2>/dev/null
   hg_drop_package_cache
-  mkdir -p "$HG_DATA"
+  hg_mkdir "$HG_DATA"
   if [ -n "$_hg_stamp" ]; then
     printf '%s\n' "$_hg_stamp" > "$HG_DATA/apk-stamp"
     hg_log "post-fs-data: APKs new or changed: package cache and overlay idmap dropped"
@@ -2714,13 +2806,28 @@ hg_app_version_check() {
 # unknown, the change did not stick, or there is no `ksud profile` (another root solution, whose
 # own unmount rules then apply). Needed only in mixed mode (KernelSU-tracked mounts), harmless in
 # self mode, so it runs in both (a later switch to mixed then finds it set).
+#
+# A KernelSU fork whose ksud has no `profile get/set` (ReSukiSU/BakaSU 4.2.0-rc3 has get-sepolicy,
+# set-sepolicy and templates only; owner's phone, 2026-11-05) leaves the default, which unmounts:
+# then only the owner can set it, in the manager app (HG_KSU_MANUAL_STEP). Marked by ksu-manual
+# (hg_ksu_manual_hint names the step in a rollback notice) and logged; the marker goes as soon as
+# a ksud with the profile commands, or none at all, is found.
 hg_ksu_keep_mounts() {
-  _hg_prof="$($HG_CMD_KSUD profile get "$HG_PKG" 2>/dev/null)" || return 1
+  if ! _hg_prof="$($HG_CMD_KSUD profile get "$HG_PKG" 2>/dev/null)"; then
+    if hg_ksu_no_profile_api; then
+      hg_mkdir "$HG_DATA" && : > "$HG_DATA/ksu-manual"
+      hg_log_once "KernelSU profile: this ksud has no \`profile get/set\` (a KernelSU fork such as ReSukiSU), so $HG_PKG's App Profile can't be set from here. If HyperGestures crashes at start: $HG_KSU_MANUAL_STEP."
+    else
+      rm -f "$HG_DATA/ksu-manual"
+    fi
+    return 1
+  fi
+  rm -f "$HG_DATA/ksu-manual"
   printf '%s\n' "$_hg_prof" | grep -q '"non_root"' || return 1 # a root profile: not ours to change
   printf '%s\n' "$_hg_prof" | grep -q '"umount_modules": *false' && return 1
   _hg_uid="$(printf '%s\n' "$_hg_prof" | sed -n 's/.*"uid": *\(-\{0,1\}[0-9]*\).*/\1/p' | head -n 1)"
   case "$_hg_uid" in ''|-*|0) return 1 ;; esac # the package is not known yet
-  mkdir -p "$HG_DATA"
+  hg_mkdir "$HG_DATA"
   printf '%s\n' "$_hg_prof" | sed -e 's/"stored": *false/"stored": true/' \
     -e 's/"use_default": *true/"use_default": false/' \
     -e 's/"umount_modules": *true/"umount_modules": false/' > "$HG_DATA/ksu-profile.json"
@@ -2736,6 +2843,23 @@ hg_ksu_keep_mounts() {
   fi
   hg_log_once "KernelSU profile: ksud profile set succeeded, but $HG_PKG's profile still does not say umount_modules false; its process may not see the mounted APK"
   return 1
+}
+
+# 0 when ksud runs but its `profile` command lists no `get` (see hg_ksu_keep_mounts); 1 when it
+# has one, or there is no ksud (another root solution, whose own unmount rules apply).
+hg_ksu_no_profile_api() {
+  _hg_kh="$($HG_CMD_KSUD profile --help 2>/dev/null)" || return 1
+  printf '%s\n' "$_hg_kh" | grep -q '^ *get ' && return 1
+  return 0
+}
+
+# The rollback notice's addition ($1 = the reason): the manual App Profile step, when ksud could
+# not set it (ksu-manual) and the reason is our app failing (it crashed, or never bound), which an
+# unmounting profile causes. Prints nothing and returns 1 otherwise.
+hg_ksu_manual_hint() {
+  [ -f "$HG_DATA/ksu-manual" ] || return 1
+  case "$1" in *"$HG_PKG crashed"*|*"provider not bound"*) ;; *) return 1 ;; esac
+  printf '%s' "Likely cause: KernelSU unmounts modules for HyperGestures, and this KernelSU can't change that for a module. Fix: $HG_KSU_MANUAL_STEP, then re-enable the module."
 }
 
 # 0.3.5-alpha pointed config_recentsComponentName at our app with a fabricated overlay
@@ -2829,7 +2953,7 @@ hg_post_fs_data_main() {
 # (hg_mount_check). A dormant boot (HOME is MiuiHome) sets nothing up (hg_dormant_boot).
 hg_service_main() {
   hg_wait_boot
-  mkdir -p "$HG_DATA"
+  hg_mkdir "$HG_DATA"
   hg_boot_finished "boot_completed reached" # whatever happens next, this boot was not a boot loop
   # After it: an earlier version touched the app's log copy here, through /sdcard's FUSE mount,
   # which may block this early.
