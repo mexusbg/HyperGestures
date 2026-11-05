@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.3-beta
+
+Install in KernelSU, then reboot fully. Tested on HyperOS 4.0.1.0 stable.
+
+- **Previews after split screen:** an app you just used in split screen shows its last
+  full-screen picture in recents instead of its icon. A new switch under Recents, on by default;
+  turn it off for the icon.
+- **Faster boot check:** the module's check after boot passes as soon as gestures are confirmed
+  working twice in a row, usually within half a minute instead of two minutes. It still rolls
+  back on a crash loop or if gestures stop.
+- **ReSukiSU (BakaSU) and other KernelSU forks:** some can't set HyperGestures' App Profile from
+  a module, so the app crashed at start and the module rolled back. The installer now shows the
+  step to do by hand (README, Install), and a rollback for this reason says so.
+- **ReSuSFS:** the module now sets up with ReSuSFS installed. Before, it stopped at boot with
+  "the undo guard could not be installed".
+- **Built for HyperOS 4.0.1.0**, whose system files match 4.0.0.13's.
+
 ## 0.4.2-beta
 
 Install in KernelSU, then reboot fully. Tested on HyperOS 4.0.1.0 stable.
