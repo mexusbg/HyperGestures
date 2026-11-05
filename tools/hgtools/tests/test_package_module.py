@@ -9,7 +9,7 @@ from tools.hgtools.package_module import PackagingError
 
 ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE = ROOT / "module" / "template"
-FP = "Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.0.13.XPAEUXM:user/release-keys"
+FP = "Xiaomi/nezha_eea/nezha:17/CP2A.260605.016/OS4.0.1.0.XPAEUXM:user/release-keys"
 NOTIF_APK = "system/priv-app/HyperGesturesNotif/HyperGesturesNotif.apk"
 NOTIF_XML = "system/etc/permissions/privapp-permissions-com.hypergestures.notif.xml"
 NOTIF_ENTRIES = ["AndroidManifest.xml", "classes.dex", "META-INF/xposed/java_init.list",
