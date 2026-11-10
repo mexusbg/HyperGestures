@@ -129,8 +129,8 @@ public final class HgProcessKill {
      * takes it, otherwise {@code removeTask} for the task and, KILL_DELAY_MS later,
      * killBackgroundProcesses for its package, unless another card ({@code otherCardPackages})
      * is of the same package (it may be the user's other window), or it is HOME's or ours.
-     * Locked cards are killed too, as in HyperOS (a lock only protects from Clear all and
-     * HyperOS's cleaners). Unlike MiuiHome there is no "relaunched meanwhile" guard (it compares
+     * Locked cards never get here: their dismiss is refused (HgTaskLocking.refuseDismiss;
+     * owner, 2026-11-09). Unlike MiuiHome there is no "relaunched meanwhile" guard (it compares
      * the task's last active time); the kill follows the dismiss, as AOSP's removeTask does.
      *
      * Our own package is never killed (its card is our settings page): that would kill recents

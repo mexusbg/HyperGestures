@@ -19,7 +19,11 @@ package com.android.quickstep.views
 import android.animation.AnimatorSet
 import android.app.ActivityTaskManager.INVALID_TASK_ID
 import android.util.Log
+import android.animation.Animator // HyperGestures: hgPackKept
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.view.View
+import com.android.app.animation.Interpolators // HyperGestures: hgPackKept
 import androidx.core.animation.addListener
 import androidx.core.graphics.toRectF
 import androidx.core.view.children
@@ -373,6 +377,14 @@ constructor(
         }
     }
 
+    /**
+     * HyperGestures: whether Clear all flies [taskView] out: AOSP's visible cards only, but every
+     * card in the stack layout, whose cards behind the front one count as not visible: one left
+     * in place showed for a moment once the front card had flown (owner, 2026-11-10).
+     */
+    private fun hgFliesOut(taskView: TaskView): Boolean =
+        recentsView.isHgStack || recentsView.isTaskViewVisible(taskView)
+
     /** Dismisses all */
     fun dismissAllTasks() {
         // HyperGestures: as in HyperOS recents, the cards of locked apps (HgTaskLockStore) survive
@@ -425,7 +437,7 @@ constructor(
         val allDismissSprings =
             recentsView.mUtils.taskViews
                 .reversed()
-                .filter { taskView -> recentsView.isTaskViewVisible(taskView) }
+                .filter { taskView -> hgFliesOut(taskView) }
                 .mapNotNull { createDismissedTaskViewSpringAnimation(it) }
         SpringSet(SpringAnimation(FloatValueHolder()).setSpring(SpringForce(1f)))
             .playTogether(allDismissSprings)
@@ -472,9 +484,88 @@ constructor(
     }
 
     /**
+     * HyperGestures: Clear all's end with kept (locked) cards, as MiuiHome's (they stay in the
+     * list while recents leaves; owner, 2026-11-10: recents flashed empty, as every card was
+     * removed before leaving): the flown-out [dismissed] cards are removed and the strip scrolled
+     * to its first page in one go, then every kept card slides from where it was drawn to its
+     * new place (TaskView.hgPackTranslationX/Y, which the vertical layout does not set) over
+     * PACK_MS, and [onPacked] runs.
+     */
+    private fun hgPackKept(dismissed: List<TaskView>, onPacked: () -> Unit) {
+        // HyperGestures: only the vertical layout packs. In the horizontal and stack layouts the
+        // centre card is usually the one just cleared and the kept cards lie off screen or
+        // behind it: a slide brought cards in without thumbnails and jumped as recents left, or
+        // showed nothing (owner, 2026-11-10: "not ok in horizontal", "do the same for stack").
+        // Recents leaves at once with the kept cards where they are; the next load drops the
+        // flown-out cards.
+        if (!recentsView.isHgVertical) {
+            onPacked()
+            return
+        }
+        with(recentsView) {
+            val kept = mUtils.taskViews.filter { it !in dismissed }.toList()
+            fun drawnAt(view: TaskView, out: FloatArray) {
+                out[0] = view.left + view.translationX + view.width / 2f - scrollX
+                out[1] = view.top + view.translationY + view.height / 2f - scrollY
+            }
+            val before = kept.associateWith { FloatArray(2).also { out -> drawnAt(it, out) } }
+            dismissed.filter { it.parent === this }.forEach { removeViewInLayout(it) }
+            if (kept.isEmpty() || !ValueAnimator.areAnimatorsEnabled()) {
+                requestLayout()
+                onPacked()
+                return
+            }
+            resetTaskVisuals()
+            measure(
+                View.MeasureSpec.makeMeasureSpec(measuredWidth, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(measuredHeight, View.MeasureSpec.EXACTLY),
+            )
+            layout(left, top, right, bottom)
+            currentPage = 0
+            hgApplyLayoutNow()
+            val now = FloatArray(2)
+            val ways =
+                kept.associateWith { view ->
+                    drawnAt(view, now)
+                    val was = before.getValue(view)
+                    floatArrayOf(was[0] - now[0], was[1] - now[1])
+                }
+            kept.forEach { view ->
+                view.hgPackTranslationX = ways.getValue(view)[0]
+                view.hgPackTranslationY = ways.getValue(view)[1]
+            }
+            Log.i(TAG, "clear all: packing ${kept.size} kept cards")
+            ValueAnimator.ofFloat(1f, 0f)
+                .apply {
+                    duration = PACK_MS
+                    interpolator = Interpolators.EMPHASIZED
+                    addUpdateListener { animator ->
+                        val rest = animator.animatedValue as Float
+                        kept.forEach { view ->
+                            view.hgPackTranslationX = ways.getValue(view)[0] * rest
+                            view.hgPackTranslationY = ways.getValue(view)[1] * rest
+                        }
+                    }
+                    addListener(
+                        object : AnimatorListenerAdapter() {
+                            override fun onAnimationEnd(animation: Animator) {
+                                kept.forEach { view ->
+                                    view.hgPackTranslationX = 0f
+                                    view.hgPackTranslationY = 0f
+                                }
+                                onPacked()
+                            }
+                        }
+                    )
+                }
+                .start()
+        }
+    }
+
+    /**
      * HyperGestures: Clear all with locked cards present. Flies out and removes (from recents and
-     * the system) only [toDismiss], the cards without a locked task, then goes home like AOSP's
-     * dismiss-all; the locked apps' tasks stay. With every card locked nothing is removed and it
+     * the system) only [toDismiss], the cards without a locked task, packs the kept cards
+     * (hgPackKept) and goes home; the locked apps' tasks stay. With every card locked nothing is removed and it
      * just goes home. [hgClearAll] (HgClearAll, null when switched off) kills the removed apps,
      * keeping [keptTasks], in place of the removal.
      */
@@ -490,32 +581,43 @@ constructor(
         val dismissSprings =
             toDismiss
                 .reversed()
-                .filter { taskView -> recentsView.isTaskViewVisible(taskView) }
+                .filter { taskView -> hgFliesOut(taskView) }
                 .mapNotNull { createDismissedTaskViewSpringAnimation(it) }
         SpringSet(SpringAnimation(FloatValueHolder()).setSpring(SpringForce(1f)))
             .playTogether(dismissSprings)
             .addEndListener {
                 with(recentsView) {
-                    finishRecentsAnimation(/* toHome */ true, /* shouldPip */ false) {
-                        uiHelperExecutor.execute {
-                            val removeTasks = Runnable {
-                                taskIds.forEach { activityManagerWrapper.removeTask(it) }
-                            }
-                            if (hgClearAll != null) {
-                                hgClearAll.clean(
-                                    dismissedTasks,
-                                    keptTasks,
-                                    emptyList(),
-                                    removeTasks,
-                                )
-                            } else {
-                                removeTasks.run()
-                            }
-                        }
-                        hgRemoveAllAndGoHome() // HyperGestures: shared with its variants
+                    val goHome = {
+                        if (!mUtils.isInDesktopFirstMode()) startHome()
                         onDismissAnimationEnds()
                         InteractionJankMonitorWrapper.end(Cuj.CUJ_LAUNCHER_OVERVIEW_CLEAR_ALL)
                     }
+                    // HyperGestures: the kept cards pack at once after the fly-out (waiting for
+                    // the recents animation's finish left recents blank for a few frames), unless
+                    // a flown-out card is the running app's live tile, whose removal needs the
+                    // animation finished first (as AOSP's onEndSnappingAndRelayout).
+                    val liveTileDismissed = toDismiss.any { it.isRunningTask }
+                    val leave = {
+                        finishRecentsAnimation(/* toHome */ true, /* shouldPip */ false) {
+                            uiHelperExecutor.execute {
+                                val removeTasks = Runnable {
+                                    taskIds.forEach { activityManagerWrapper.removeTask(it) }
+                                }
+                                if (hgClearAll != null) {
+                                    hgClearAll.clean(
+                                        dismissedTasks,
+                                        keptTasks,
+                                        emptyList(),
+                                        removeTasks,
+                                    )
+                                } else {
+                                    removeTasks.run()
+                                }
+                            }
+                            if (liveTileDismissed) hgPackKept(toDismiss) { goHome() } else goHome()
+                        }
+                    }
+                    if (liveTileDismissed) leave() else hgPackKept(toDismiss) { leave() }
                 }
             }
             .start()
@@ -562,7 +664,7 @@ constructor(
         val dismissSprings =
             toDismiss
                 .reversed()
-                .filter { taskView -> recentsView.isTaskViewVisible(taskView) }
+                .filter { taskView -> hgFliesOut(taskView) }
                 .mapNotNull { createDismissedTaskViewSpringAnimation(it) }
         SpringSet(SpringAnimation(FloatValueHolder()).setSpring(SpringForce(1f)))
             .playTogether(dismissSprings)
@@ -585,8 +687,10 @@ constructor(
                     } else {
                         Log.w(TAG, "clear all: cannot return to the running app, going home")
                         finishRecentsAnimation(/* toHome */ true, /* shouldPip */ false) {
-                            hgRemoveAllAndGoHome()
-                            finish()
+                            hgPackKept(toDismiss) {
+                                if (!mUtils.isInDesktopFirstMode()) startHome()
+                                finish()
+                            }
                         }
                     }
                 }
@@ -1743,5 +1847,7 @@ constructor(
         private const val SPEED_UP_STIFFNESS = 100_000f
         // HyperGestures: dismissAndReturnToRunning's safety net for a launch that never reports.
         private const val FINISH_TIMEOUT_MS = 2000L
+        // HyperGestures: Clear all's packing of the kept cards (hgPackKept).
+        private const val PACK_MS = 300L
     }
 }

@@ -501,6 +501,20 @@ constructor(
             applyTranslationX()
         }
 
+    // HyperGestures: Clear all's packing of the kept (locked) cards (RecentsDismissUtils
+    // hgPackKept): the way back to where the card was drawn before the flown-out cards were
+    // removed, animated to 0. No layout sets it, so it moves the card in every layout.
+    var hgPackTranslationX = 0f
+        set(value) {
+            field = value
+            applyTranslationX()
+        }
+    var hgPackTranslationY = 0f
+        set(value) {
+            field = value
+            hgApplyTranslationY()
+        }
+
     // HyperGestures: MIUI's stack layout (HgStackLayout), set by RecentsView.hgUpdateStack with
     // the card's natural on-screen offset from the front card's place; null in the horizontal
     // layout, where the stack values below stay 0 / 1 and change nothing.
@@ -884,6 +898,8 @@ constructor(
         hgStack = null // HyperGestures: the next binding gets its stack values afresh
         hgVertical = null // HyperGestures: and its grid values
         hgDismissDragging = false // HyperGestures
+        hgPackTranslationX = 0f // HyperGestures
+        hgPackTranslationY = 0f
         resetPersistentViewTransforms()
 
         groupTask = null
@@ -2017,6 +2033,7 @@ constructor(
                 persistentTranslationX +
                 animateToIconTranslationX +
                 hgActionsTranslationX +
+                hgPackTranslationX +
                 hgStackTranslationX // HyperGestures: 0 outside the stack layout
     }
 
@@ -2387,6 +2404,7 @@ constructor(
                 splitSelectTranslationY +
                 persistentTranslationY +
                 animateToIconTranslationY +
+                hgPackTranslationY +
                 hgStackTranslationY // HyperGestures: 0 outside the vertical layout
     }
 

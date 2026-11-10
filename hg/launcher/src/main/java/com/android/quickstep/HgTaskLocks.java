@@ -79,4 +79,16 @@ public final class HgTaskLocks {
         }
         return Collections.unmodifiableSet(out);
     }
+
+    /**
+     * Whether a card swiped for dismissal goes on release. AOSP's rule (TaskViewDismissTouchController
+     * onDragEnd): a fling up while the card may detach ({@code allowDetach}), or a release past
+     * the threshold unless flung back. A locked card never goes (owner, 2026-11-09): AOSP lets a
+     * card that may not detach go when dragged past the threshold.
+     */
+    public static boolean dismissOnRelease(boolean locked, boolean allowDetach,
+            boolean flingToDismiss, boolean flingToRest, boolean beyondThreshold) {
+        if (locked) return false;
+        return allowDetach && flingToDismiss || (beyondThreshold && !flingToRest);
+    }
 }

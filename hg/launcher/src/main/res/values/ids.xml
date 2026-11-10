@@ -3,4 +3,6 @@
 <resources>
     <!-- The round background HgBlurSupport.followGlassCircle last gave a view. -->
     <item name="hg_glass_circle_res" type="id" />
+    <!-- A header icon's lock badge drawable (HgTaskLockBadge). -->
+    <item name="hg_task_lock_badge" type="id" />
 </resources>

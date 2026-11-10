@@ -2668,6 +2668,11 @@ public abstract class RecentsView<
         mHgStackApplied = stack != null;
     }
 
+    /** HyperGestures: runs the stack or vertical layout's pass now (Clear all's packing). */
+    public void hgApplyLayoutNow() {
+        hgUpdateStack();
+    }
+
     /** HyperGestures: a card's dismiss started or ended: the stack's header clips follow. */
     public void hgOnDismissChanged() {
         if (mHgStack != null) hgUpdateStack();
@@ -4092,6 +4097,12 @@ public abstract class RecentsView<
 
     /** Dismisses the entire [taskView]. */
     public void dismissTaskView(TaskView taskView, boolean removeTask) {
+        // HyperGestures: a card with a locked app is not closed (its menu's Close, the delete key):
+        // its lock badge wobbles instead (owner, 2026-11-09). Swipes: TaskViewDismissTouchController.
+        if (removeTask && com.android.quickstep.HgTaskLocking.anyLocked(getContext(), taskView)) {
+            com.android.quickstep.HgTaskLocking.refuseDismiss(taskView);
+            return;
+        }
         RecentsDismissUtils.SpringSet dismissSpringSet =
                 mDismissUtils.createTaskDismissSpringAnimation(taskView, removeTask,
                         false /* isSplitSelection */);
@@ -5562,6 +5573,13 @@ public abstract class RecentsView<
         // passed in because in the event we're in split screen, we use the passed in targets
         // to create new RemoteAnimationTargets in assignTargetsForSplitScreen(), and the
         // mSyncTransactionApplier doesn't get transferred over
+        // HyperGestures: home closing along with an app (Circle to Search over the home screen is
+        // translucent) stays hidden under the live tile, as during the swipe; AOSP's default home
+        // proxy (always visible) drew Nova over the cards once recents had settled. The home
+        // target is only in unfilteredApps: apps drops it when it closes along with an app.
+        final float hgHomeAlpha = com.android.quickstep.HgHomeUnderRecents.liveTileHomeAlpha(
+                recentsAnimationTargets.unfilteredApps);
+        Log.d(TAG, "HyperGestures: live tile home alpha " + hgHomeAlpha);
         runActionOnRemoteHandles(remoteTargetHandle -> {
             final TransformParams params = remoteTargetHandle.getTransformParams();
             if (mContainer instanceof RecentsWindowManager) {
@@ -5570,6 +5588,9 @@ public abstract class RecentsView<
                             1f, 1f, app.localBounds.exactCenterX(), app.localBounds.exactCenterY());
                     builder.setMatrix(mTmpMatrix).setAlpha(1f).setShow();
                 });
+            } else if (hgHomeAlpha == 0f) {
+                params.setHomeBuilderProxy((builder, app, transformParams) ->
+                        builder.setAlpha(0f));
             }
 
             if (mSyncTransactionApplier != null) {

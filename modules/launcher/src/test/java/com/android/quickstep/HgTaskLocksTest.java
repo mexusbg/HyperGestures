@@ -83,4 +83,23 @@ public class HgTaskLocksTest {
     @Test public void import_withoutSystemList_keepsOurs() {
         assertEquals(set("x:0"), HgTaskLocks.withImported(set("x:0"), 0, null));
     }
+
+    /**
+     * A locked card is never dismissed by a swipe (owner, 2026-11-09: it was, by a drag past half
+     * the way, the one case AOSP's no-detach mode still lets through), whatever the release.
+     */
+    @Test public void dismissOnRelease_lockedNeverDismisses() {
+        assertFalse(HgTaskLocks.dismissOnRelease(true, true, true, false, true));
+        assertFalse(HgTaskLocks.dismissOnRelease(true, false, false, false, true));
+        assertFalse(HgTaskLocks.dismissOnRelease(true, true, true, false, false));
+    }
+
+    /** An unlocked card: AOSP's rule (a fling up, or past the threshold unless flung back). */
+    @Test public void dismissOnRelease_unlockedAsAosp() {
+        assertTrue(HgTaskLocks.dismissOnRelease(false, true, true, false, false));
+        assertFalse(HgTaskLocks.dismissOnRelease(false, false, true, false, false));
+        assertTrue(HgTaskLocks.dismissOnRelease(false, true, false, false, true));
+        assertFalse(HgTaskLocks.dismissOnRelease(false, true, false, true, true));
+        assertFalse(HgTaskLocks.dismissOnRelease(false, true, false, false, false));
+    }
 }

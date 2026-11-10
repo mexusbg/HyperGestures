@@ -86,16 +86,13 @@ class TaskContainer(
         traceSection("TaskContainer.bind") {
             digitalWellBeingToast?.bind(task, taskView, snapshotView, stagePosition)
             // HyperGestures: a locked app's card shows a lock badge (HgTaskLockStore).
-            HgTaskLockBadge.apply(
-                taskContentView,
-                HgTaskLockStore.get(taskView.context).isLocked(task),
-            )
+            HgTaskLockBadge.apply(this, HgTaskLockStore.get(taskView.context).isLocked(task))
         }
 
     fun destroy() =
         traceSection("TaskContainer.destroy") {
-            // HyperGestures: recycled content views start without the lock badge.
-            HgTaskLockBadge.apply(taskContentView, false)
+            // HyperGestures: recycled header icons start without the lock badge.
+            HgTaskLockBadge.apply(this, false)
             digitalWellBeingToast?.destroy()
             taskContentView.scaleX = 1f
             taskContentView.scaleY = 1f

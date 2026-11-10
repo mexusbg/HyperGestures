@@ -67,4 +67,29 @@ public class HgHomeUnderRecentsTest {
                         new int[] {CLOSING, CLOSING}, new int[] {UNDEFINED, HOME},
                         new boolean[] {false, true}));
     }
+
+    private static final int RECENTS = 3; // WindowConfiguration.ACTIVITY_TYPE_RECENTS
+
+    /**
+     * Circle to Search over the home screen (owner, 2026-11-08): its task is translucent, so home
+     * closes with it. Once recents has settled, RecentsView's live tile redraws with its own
+     * TransformParams, whose home proxy must keep home hidden too, or Nova covers the cards.
+     */
+    @Test
+    public void liveTile_homeClosingWithAnApp_hidden() {
+        org.junit.Assert.assertEquals(0f,
+                HgHomeUnderRecents.liveTileHomeAlpha(
+                        new int[] {OPENING, CLOSING, CLOSING},
+                        new int[] {RECENTS, STANDARD, HOME},
+                        new boolean[] {true, true, true}), 0f);
+    }
+
+    /** Home alone: AOSP's own proxy, always visible. */
+    @Test
+    public void liveTile_homeAlone_visible() {
+        org.junit.Assert.assertEquals(1f,
+                HgHomeUnderRecents.liveTileHomeAlpha(
+                        new int[] {OPENING, CLOSING}, new int[] {RECENTS, HOME},
+                        new boolean[] {true, true}), 0f);
+    }
 }

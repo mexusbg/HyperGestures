@@ -215,4 +215,26 @@ public class HgHomeGesturePolicyTest {
     @Test public void appsAreAlwaysTaskCards() {
         assertTrue(HgHomeGesturePolicy.isTaskCard(/* isHome= */ false, /* otherApp= */ false));
     }
+
+    /**
+     * Swiping up from home with recents empty (Clear all just ran; owner, 2026-11-10): the
+     * fallback skips the home stub and stops tracking it; the task list then loads mid-gesture
+     * and AOSP added the stub anyway, which nothing removed: an empty card in the grid's first
+     * slot. A home stub is added only while it is tracked.
+     */
+    @Test
+    public void homeStub_untracked_notAdded() {
+        assertTrue(HgHomeGesturePolicy.avoidHomeStub(true, false));
+    }
+
+    @Test
+    public void homeStub_tracked_addedAsAosp() {
+        assertFalse(HgHomeGesturePolicy.avoidHomeStub(true, true));
+    }
+
+    @Test
+    public void appStub_neverAvoidedHere() {
+        assertFalse(HgHomeGesturePolicy.avoidHomeStub(false, false));
+        assertFalse(HgHomeGesturePolicy.avoidHomeStub(false, true));
+    }
 }

@@ -67,6 +67,9 @@ public abstract class FallbackRecentsView<CONTAINER_TYPE extends Context & Recen
 
     @Nullable
     private Task mHomeTask;
+    // HyperGestures: the home task the current gesture started on, kept after mHomeTask is
+    // dropped (HgHomeGesturePolicy.avoidHomeStub); -1 outside a gesture from home.
+    private int mHgGestureHomeTaskId = -1;
 
     public FallbackRecentsView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
@@ -108,6 +111,7 @@ public abstract class FallbackRecentsView<CONTAINER_TYPE extends Context & Recen
         //  Home task should be defined as the front-most task info I think?
         if (homeTaskInfo != null) {
             mHomeTask = Task.from(homeTaskInfo.getTaskInfo1());
+            mHgGestureHomeTaskId = mHomeTask.key.id;
         }
         onGestureAnimationStart(homeTaskInfo);
     }
@@ -146,6 +150,7 @@ public abstract class FallbackRecentsView<CONTAINER_TYPE extends Context & Recen
             // Clean-up logic that occurs when recents is no longer in use/visible.
             reset();
         }
+        mHgGestureHomeTaskId = -1; // HyperGestures
         super.onGestureAnimationEnd();
     }
 
@@ -173,6 +178,13 @@ public abstract class FallbackRecentsView<CONTAINER_TYPE extends Context & Recen
             return super.shouldAvoidAddingStubTaskView(groupedTaskInfo);
         }
 
+        // HyperGestures: no stub for the gesture's home task once it is no longer tracked: nothing
+        // would remove it (HgHomeGesturePolicy.avoidHomeStub).
+        if (com.android.quickstep.HgHomeGesturePolicy.avoidHomeStub(
+                mHgGestureHomeTaskId != -1 && groupedTaskInfo.containsTask(mHgGestureHomeTaskId),
+                mHomeTask != null)) {
+            return true;
+        }
         if (mHomeTask != null && groupedTaskInfo.containsTask(mHomeTask.key.id) && !hasTaskViews()
                 && mLoadPlanEverApplied) {
             // Do not add a stub task if we are running over home with empty recents, so that we

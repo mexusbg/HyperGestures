@@ -64,6 +64,16 @@ public final class HgRecentsHaptics {
         });
     }
 
+    /** A locked card's dismiss was refused: the reject haptic, when touch feedback is on. */
+    static void playRefused(View view) {
+        Context app = view.getContext().getApplicationContext();
+        UI_HELPER_EXECUTOR.execute(() -> {
+            if (!feedbackOn(app)) return;
+            MAIN_EXECUTOR.execute(() ->
+                    view.performHapticFeedback(HapticFeedbackConstants.REJECT));
+        });
+    }
+
     /**
      * MiuiHome's Clear all effect for {@code hapticVersion} (sys.haptic.version); a phone whose
      * vibrator does not support it plays nothing (perform checks).

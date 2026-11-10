@@ -48,6 +48,8 @@ import com.android.mechanics.spec.MotionSpec
 import com.android.mechanics.spring.SpringParameters
 import com.android.mechanics.view.DistanceGestureContext
 import com.android.mechanics.view.ViewMotionValue
+import com.android.quickstep.HgTaskLocking // HyperGestures
+import com.android.quickstep.HgTaskLocks // HyperGestures
 import com.android.quickstep.HgVerticalLayout // HyperGestures
 import com.android.quickstep.views.RecentsDismissUtils
 import com.android.quickstep.views.RecentsView
@@ -106,6 +108,9 @@ constructor(
     private var canInterceptTouch = false
     private var isDismissing = false
     private var allowDetach = true
+    // HyperGestures: the dragged card has a locked app: it may not detach, never goes on release,
+    // and its lock badge wobbles when let go (HgTaskLocking.refuseDismiss; owner, 2026-11-09).
+    private var hgLocked = false
     // HyperGestures: see hgSide; the map is set at each touch-down.
     private var hgSideways = false
     private val hgMatrix = Matrix()
@@ -273,6 +278,8 @@ constructor(
         verticalFactor = recentsView.pagedOrientationHandler.getTaskDismissVerticalDirection()
         taskBeingDragged.isBeingDraggedForDismissal = true
         allowDetach = recentsView.canRemoveTaskView(taskBeingDragged)
+        hgLocked = HgTaskLocking.anyLocked(container.asContext(), taskBeingDragged)
+        if (hgLocked) allowDetach = false
         detector.setDetectableScrollConditions(upDirection, /* ignoreSlop= */ false)
         return true
     }
@@ -416,9 +423,16 @@ constructor(
         val velocityIsGoingUp = recentsView.pagedOrientationHandler.isGoingUp(velocity, isRtl)
         val isFlingingTowardsDismiss = detector.isFling(velocity) && velocityIsGoingUp
         val isFlingingTowardsRestState = detector.isFling(velocity) && !velocityIsGoingUp
+        // HyperGestures: AOSP's rule, but a locked card never goes (HgTaskLocks.dismissOnRelease).
         isDismissing =
-            allowDetach && isFlingingTowardsDismiss ||
-                (isBeyondDismissThreshold && !isFlingingTowardsRestState)
+            HgTaskLocks.dismissOnRelease(
+                hgLocked,
+                allowDetach,
+                isFlingingTowardsDismiss,
+                isFlingingTowardsRestState,
+                isBeyondDismissThreshold,
+            )
+        if (hgLocked) HgTaskLocking.refuseDismiss(taskBeingDragged)
         val dismissThreshold = (DISMISS_THRESHOLD_FRACTION * dismissLength * verticalFactor).toInt()
         val finalPosition = if (isDismissing) (dismissLength * verticalFactor).toFloat() else 0f
         springAnimation =
@@ -434,6 +448,16 @@ constructor(
                 /* shouldRemoveTaskView= */ isDismissing,
                 /* isSplitSelection= */ false,
             )
+        // HyperGestures: a card that settles back drops the drag's translationZ once there. AOSP
+        // leaves it (clearState resets only the next touch's card), and in the stack layout a
+        // card with any Z is drawn over the newer cards (Z sorts before getChildDrawingOrder):
+        // a locked card, which always settles back, stayed on top while scrolling (owner,
+        // 2026-11-10).
+        if (!isDismissing) {
+            val settled = springAnimation
+            if (settled == null) taskBeingDragged.translationZ = 0f
+            else settled.addEndListener { taskBeingDragged.translationZ = 0f }
+        }
         recentsScaleAnimation =
             recentsView.animateRecentsScale(RECENTS_SCALE_DEFAULT).addEndListener { _, _, _, _ ->
                 recentsScaleAnimation = null
@@ -449,6 +473,7 @@ constructor(
         taskDragDisplacementValue = null
         isDismissing = false
         allowDetach = true
+        hgLocked = false // HyperGestures
     }
 
     private fun getRecentsScale(dismissFraction: Float): Float {

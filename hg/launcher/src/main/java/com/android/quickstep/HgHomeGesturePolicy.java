@@ -177,4 +177,16 @@ public final class HgHomeGesturePolicy {
     public static boolean isTaskCard(boolean isHome, boolean otherApp) {
         return !isHome || !otherApp;
     }
+
+    /**
+     * Whether the fallback recents must not add a stub card for the running task: the home task
+     * the gesture started on ({@code isGestureHome}) once it is no longer tracked as the stub
+     * ({@code homeTracked}, FallbackRecentsView.mHomeTask). Only a tracked stub is removed when
+     * the gesture ends in recents; AOSP added an untracked one when recents was empty at the
+     * gesture's start (just after Clear all) and the task list loaded mid-gesture, leaving an
+     * empty card in the first slot (owner, 2026-11-10).
+     */
+    public static boolean avoidHomeStub(boolean isGestureHome, boolean homeTracked) {
+        return isGestureHome && !homeTracked;
+    }
 }

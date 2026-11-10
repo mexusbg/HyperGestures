@@ -46,6 +46,29 @@ public final class HgHomeUnderRecents {
         return java.util.Arrays.copyOf(out, n);
     }
 
+    /**
+     * The home window's alpha for RecentsView's live tile (its own TransformParams, which draw
+     * once recents has settled): 0 when home closes along with an app (as {@link #homesToHide}:
+     * Circle to Search over the home screen is translucent, so home closes with it; owner,
+     * 2026-11-08), otherwise 1, AOSP's always-visible home.
+     */
+    public static float liveTileHomeAlpha(int[] modes, int[] activityTypes, boolean[] hasActivity) {
+        return homesToHide(modes, activityTypes, hasActivity).length > 0 ? 0f : 1f;
+    }
+
+    /** {@link #liveTileHomeAlpha} for all the recents animation's targets (unfilteredApps). */
+    public static float liveTileHomeAlpha(RemoteAnimationTarget[] apps) {
+        int[] modes = new int[apps.length];
+        int[] types = new int[apps.length];
+        boolean[] hasActivity = new boolean[apps.length];
+        for (int i = 0; i < apps.length; i++) {
+            modes[i] = apps[i].mode;
+            types[i] = apps[i].windowConfiguration.getActivityType();
+            hasActivity[i] = apps[i].taskInfo != null && apps[i].taskInfo.topActivity != null;
+        }
+        return liveTileHomeAlpha(modes, types, hasActivity);
+    }
+
     /** Hides the homes to hide among {@code apps}; returns their surfaces, for {@link #restore}. */
     public static List<SurfaceControl> hide(RemoteAnimationTarget[] apps) {
         int[] modes = new int[apps.length];

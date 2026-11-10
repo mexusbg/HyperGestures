@@ -313,6 +313,10 @@ constructor(
 
     fun getDrawable(): Drawable? = iconView?.drawable
 
+    /** HyperGestures: the app icon itself (HgTaskLockBadge draws the lock badge on it). */
+    val hgIconView: View?
+        get() = iconView
+
     private var currentIconDrawableHash: Int = 0
 
     fun setDrawable(icon: Drawable?) {

@@ -11,8 +11,6 @@
     <string name="hg_task_menu_floating_window">Floating window</string>
     <!-- Task menu: close the app (remove its task), as swiping the card away [CHAR LIMIT=30] -->
     <string name="hg_task_menu_close">Close</string>
-    <!-- Content description of the lock badge on a locked recents card -->
-    <string name="hg_task_locked">Locked</string>
 
     <!-- Recents memory line (HyperOS's status_bar_recent_memory_info1): free of total memory,
          e.g. "5.3 GB of 16.0 GB available" -->
