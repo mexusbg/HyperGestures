@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.4-beta
+
+Install in KernelSU, then reboot fully. Tested on HyperOS 4.0.1.0 stable.
+
+- **Locked apps can't be closed:** swiping a locked card up, its menu's Close and the delete key
+  no longer close it. The card springs back, its lock wobbles and the phone gives a short
+  "no" vibration. Unlock it first to close it.
+- **Lock on the app icon:** a locked card's lock now sits on its app icon, in every layout,
+  instead of in the corner of the preview.
+- **Clear all with locked apps:** recents no longer flashes empty before going home. The
+  unlocked cards fly out and recents closes with the locked ones still showing; in the vertical
+  layout they first slide together. In the stack layout cards hidden behind the front one fly
+  out too.
+- **Stack layout:** a card swiped up that springs back no longer stays drawn over the cards in
+  front of it while you scroll.
+- **Vertical layout:** no more empty first card after Clear all followed by a swipe up from the
+  home screen.
+- **Circle to Search:** started on the home screen, then swiped up to recents, the home screen
+  no longer covers the cards.
+
 ## 0.4.3-beta
 
 Install in KernelSU, then reboot fully. Tested on HyperOS 4.0.1.0 stable.

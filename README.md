@@ -49,7 +49,8 @@ The settings page:
   stack (a deck), with MiuiHome's sizes and motion and frosted-glass blur.
 - **Card actions as on HyperOS:** swipe a card up to close the app, pull it down to lock it,
   hold it for Lock, Split screen, Floating window and App info, tap the trash button to clear
-  all (locked apps stay). MIUI's own vibrations for clearing and locking.
+  all (locked apps stay). A locked app shows a lock on its icon and can't be closed until you
+  unlock it. MIUI's own vibrations for clearing and locking.
 - **Previews after split screen:** an app you just used in split screen shows how it looked
   before the split, not a half-screen picture (optional; off shows its icon instead).
 - **Split screen and floating windows on the way up:** while swiping up from an app, drag it to
@@ -104,8 +105,8 @@ changelog. Install it and reboot. You can also install a newer zip over the old 
 - **Recents layout:** tap the Vertical, Horizontal or Stack tile under Recents. The next time
   you open recents, it uses that layout.
 - **In recents:**
-  - swipe a card up: close the app;
-  - pull a card down: lock or unlock it (locked apps survive Clear all);
+  - swipe a card up: close the app (a locked app's card springs back instead);
+  - pull a card down: lock or unlock it (locked apps survive Clear all and can't be closed);
   - hold a card: Lock, Split screen, Floating window, App info;
   - tap the trash button: clear all;
   - turn on **Show memory** in settings for HyperOS's free-memory line under the cards.
